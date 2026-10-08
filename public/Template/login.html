@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="id">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Masuk | Nayaka MCU</title>
+        <!-- Google Font Inter -->
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+            rel="stylesheet"
+        />
+        <!-- Tailwind CSS CDN -->
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script>
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        fontFamily: {
+                            sans: ["Inter", "sans-serif"],
+                        },
+                        colors: {
+                            brand: {
+                                navy: "#00008B",
+                                orange: "#FF8C00",
+                                green: "#008000",
+                            },
+                        },
+                    },
+                },
+            };
+        </script>
+    </head>
+    <body
+        class="min-h-screen bg-slate-100 font-sans text-slate-900 antialiased selection:bg-[#00008B] selection:text-white"
+    >
+        <!-- Background subtle agar card putih lebih menonjol -->
+        <main
+            class="relative flex min-h-screen items-center justify-center bg-slate-50 p-4 sm:p-6"
+        >
+            <!-- Fundamental: Garis aksen biru navy di bagian paling atas halaman -->
+            <div class="absolute inset-x-0 top-0 h-1.5 bg-[#00008B]"></div>
+
+            <!-- Main Card Container -->
+            <div
+                class="grid w-full max-w-5xl overflow-hidden rounded-[2rem] bg-white shadow-2xl shadow-slate-200/60 lg:grid-cols-5 border border-slate-100"
+            >
+                <!-- ========================================== -->
+                <!-- PANEL KIRI: Branding & Informasi           -->
+                <!-- ========================================== -->
+                <section
+                    class="relative hidden flex-col justify-between bg-white p-10 lg:col-span-2 lg:flex xl:p-12"
+                >
+                    <!-- Fundamental: Garis aksen hijau di sisi kiri -->
+                    <div
+                        class="absolute bottom-0 left-0 top-0 w-1 bg-[#008000]"
+                    ></div>
+
+                    <div>
+                        <!-- Fundamental: Logo Utama (SVG Vector Fallback included) -->
+                        <div class="flex items-center gap-3">
+                            <img
+                                src="assets/logo.png"
+                                alt="NAYAKA Era Husada"
+                                class="h-14 w-auto object-contain"
+                                onerror="
+                                    this.onerror = null;
+                                    this.classList.add('hidden');
+                                    document
+                                        .getElementById('logo-fallback-desktop')
+                                        .classList.remove('hidden');
+                                "
+                            />
+                            <!-- Fallback jika file gambar lokal belum ada -->
+                            <div
+                                id="logo-fallback-desktop"
+                                class="hidden flex items-center gap-2"
+                            >
+                                <div
+                                    class="flex h-11 w-11 items-center justify-center rounded-xl bg-[#00008B] text-white shadow-md shadow-[#00008B]/20"
+                                >
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        class="h-6 w-6"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                        stroke-width="2.2"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            d="M12 4.5v15m7.5-7.5h-15"
+                                        />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <span
+                                        class="block text-lg font-bold tracking-tight text-[#00008B] leading-none"
+                                        >NAYAKA</span
+                                    >
+                                    <span
+                                        class="block text-[10px] font-semibold tracking-wider text-slate-500 uppercase"
+                                        >Era Husada</span
+                                    >
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-16">
+                            <h1
+                                class="mt-4 text-3xl font-bold leading-tight text-slate-800"
+                            >
+                                Medical Check Up
+                            </h1>
+                            <p
+                                class="mt-4 text-sm leading-relaxed text-slate-500"
+                            >
+                                Kelola dan pantau seluruh layanan operasional
+                                medical check-up secara efisien dan
+                                terintegrasi.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="mt-12">
+                        <!-- Fundamental: Logo Sertifikasi ISO -->
+                        <div class="mb-8">
+                            <img
+                                src="assets/logo-iso.png"
+                                alt="ISO Certified"
+                                class="h-14 w-auto object-contain grayscale opacity-70 transition-all duration-300 hover:grayscale-0 hover:opacity-100 cursor-pointer"
+                                onerror="
+                                    this.onerror = null;
+                                    this.classList.add('hidden');
+                                    document
+                                        .getElementById('iso-fallback')
+                                        .classList.remove('hidden');
+                                "
+                            />
+                            <!-- Fallback badge ISO -->
+                            <div
+                                id="iso-fallback"
+                                class="hidden inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600 grayscale opacity-80 transition hover:grayscale-0 hover:opacity-100"
+                            >
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    class="h-4 w-4 text-[#008000]"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z"
+                                    />
+                                </svg>
+                                <span>ISO 9001 : 2015 Terakreditasi</span>
+                            </div>
+                        </div>
+
+                        <!-- Fundamental: 3 Balok Warna (Oranye, Biru, Hijau) -->
+                        <div
+                            class="flex h-1.5 w-full overflow-hidden rounded-full"
+                        >
+                            <div class="w-1/3 bg-[#FF8C00]"></div>
+                            <div class="w-1/3 bg-[#00008B]"></div>
+                            <div class="w-1/3 bg-[#008000]"></div>
+                        </div>
+                        <p class="mt-4 text-xs font-medium text-slate-400">
+                            &copy; <span id="current-year">2026</span> PT.
+                            Nayaka Era Husada.
+                        </p>
+                    </div>
+                </section>
+
+                <!-- ========================================== -->
+                <!-- PANEL KANAN: Form Login Minimalis          -->
+                <!-- ========================================== -->
+                <section
+                    class="flex flex-col justify-center bg-slate-50/50 p-8 sm:p-10 lg:col-span-3 lg:p-14 xl:p-16"
+                >
+                    <!-- Tampilan Header Mobile (Hanya muncul jika di layar kecil) -->
+                    <div
+                        class="mb-10 flex items-center justify-between lg:hidden"
+                    >
+                        <div class="flex items-center gap-2">
+                            <img
+                                src="assets/logo.png"
+                                alt="NAYAKA"
+                                class="h-10 w-auto object-contain"
+                                onerror="
+                                    this.onerror = null;
+                                    this.classList.add('hidden');
+                                    document
+                                        .getElementById('logo-fallback-mobile')
+                                        .classList.remove('hidden');
+                                "
+                            />
+                            <div
+                                id="logo-fallback-mobile"
+                                class="hidden flex items-center gap-2"
+                            >
+                                <div
+                                    class="flex h-8 w-8 items-center justify-center rounded-lg bg-[#00008B] text-white"
+                                >
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        class="h-4 w-4"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                        stroke-width="2.2"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            d="M12 4.5v15m7.5-7.5h-15"
+                                        />
+                                    </svg>
+                                </div>
+                                <span
+                                    class="text-base font-bold tracking-tight text-[#00008B]"
+                                    >NAYAKA</span
+                                >
+                            </div>
+                        </div>
+                        <div class="flex h-1 w-16 overflow-hidden rounded-full">
+                            <div class="w-1/3 bg-[#FF8C00]"></div>
+                            <div class="w-1/3 bg-[#00008B]"></div>
+                            <div class="w-1/3 bg-[#008000]"></div>
+                        </div>
+                    </div>
+
+                    <div class="mx-auto w-full max-w-sm">
+                        <h2
+                            class="text-2xl font-bold tracking-tight text-slate-900"
+                        >
+                            Selamat Datang
+                        </h2>
+                        <p class="mt-2 text-sm text-slate-500">
+                            Silahkan masuk menggunakan akun yang sudah
+                            diberikan.
+                        </p>
+
+                        <!-- Form Login -->
+                        <form
+                            class="mt-8 space-y-5"
+                            action="#"
+                            method="POST"
+                            onsubmit="event.preventDefault()"
+                        >
+                            <div>
+                                <label
+                                    for="username"
+                                    class="mb-2 block text-sm font-medium text-slate-700"
+                                    >Username</label
+                                >
+                                <input
+                                    id="username"
+                                    name="username"
+                                    type="text"
+                                    autocomplete="username"
+                                    placeholder="Masukkan username"
+                                    required
+                                    class="block w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-[#00008B] focus:ring-4 focus:ring-[#00008B]/10"
+                                />
+                            </div>
+
+                            <div>
+                                <label
+                                    for="password"
+                                    class="mb-2 block text-sm font-medium text-slate-700"
+                                    >Password</label
+                                >
+                                <div class="relative">
+                                    <input
+                                        id="password"
+                                        name="password"
+                                        type="password"
+                                        autocomplete="current-password"
+                                        placeholder="Masukkan password"
+                                        required
+                                        class="block w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-12 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-[#00008B] focus:ring-4 focus:ring-[#00008B]/10"
+                                    />
+                                    <button
+                                        type="button"
+                                        id="toggle-password"
+                                        aria-label="Tampilkan password"
+                                        class="absolute inset-y-0 right-0 flex items-center px-4 text-slate-400 transition hover:text-slate-700 focus:outline-none"
+                                    >
+                                        <!-- Eye Open Icon -->
+                                        <svg
+                                            id="eye-open"
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            stroke-width="1.8"
+                                            class="h-5 w-5"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                d="M2.25 12s3.75-6 9.75-6 9.75 6 9.75 6-3.75 6-9.75 6-9.75-6-9.75-6Z"
+                                            />
+                                            <circle cx="12" cy="12" r="2.5" />
+                                        </svg>
+                                        <!-- Eye Closed Icon -->
+                                        <svg
+                                            id="eye-closed"
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            stroke-width="1.8"
+                                            class="hidden h-5 w-5"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                d="m3 3 18 18M10.58 10.58a2 2 0 0 0 2.83 2.83M9.88 5.1A10.8 10.8 0 0 1 12 4.9c6 0 9.75 7.1 9.75 7.1a18.4 18.4 0 0 1-3.1 3.8M6.23 6.23C3.8 7.9 2.25 12 2.25 12a18.4 18.4 0 0 0 4.1 4.55A9.9 9.9 0 0 0 12 19.1c1.6 0 3.05-.4 4.3-1"
+                                            />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div
+                                class="flex items-center justify-between gap-4 text-sm"
+                            >
+                                <label
+                                    class="flex items-center gap-2 text-slate-600 cursor-pointer select-none"
+                                >
+                                    <input
+                                        name="remember"
+                                        type="checkbox"
+                                        class="h-4 w-4 rounded border-slate-300 text-[#00008B] focus:ring-[#00008B]"
+                                    />
+                                    <span>Ingat saya</span>
+                                </label>
+                                <a
+                                    href="#"
+                                    class="font-medium text-[#00008B] transition-colors hover:text-[#FF8C00]"
+                                    >Lupa password?</a
+                                >
+                            </div>
+
+                            <button
+                                type="submit"
+                                class="mt-2 w-full rounded-xl bg-[#00008B] px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-[#00008B]/30 transition-all hover:bg-[#000066] hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-[#00008B]/20 active:scale-[0.99]"
+                            >
+                                Masuk
+                            </button>
+                        </form>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <script>
+            // Set tahun hak cipta secara dinamis
+            document.getElementById("current-year").textContent =
+                new Date().getFullYear();
+
+            // Fitur Toggle Password Show / Hide
+            const toggleBtn = document.getElementById("toggle-password");
+            const passInput = document.getElementById("password");
+            const eyeOpen = document.getElementById("eye-open");
+            const eyeClosed = document.getElementById("eye-closed");
+
+            toggleBtn.addEventListener("click", function () {
+                const isPassword = passInput.type === "password";
+                passInput.type = isPassword ? "text" : "password";
+
+                eyeOpen.classList.toggle("hidden", isPassword);
+                eyeClosed.classList.toggle("hidden", !isPassword);
+
+                this.setAttribute(
+                    "aria-label",
+                    isPassword ? "Sembunyikan password" : "Tampilkan password",
+                );
+            });
+        </script>
+    </body>
+</html>

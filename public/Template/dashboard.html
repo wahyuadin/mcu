@@ -1,0 +1,841 @@
+<!doctype html>
+<html lang="id">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Dashboard | Nayaka MCU</title>
+
+        <!-- Tailwind CSS -->
+        <script src="https://cdn.tailwindcss.com"></script>
+
+        <!-- Alpine.js -->
+        <script
+            defer
+            src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
+        ></script>
+
+        <!-- Chart.js -->
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+        <style>
+            [x-cloak] {
+                display: none !important;
+            }
+        </style>
+    </head>
+    <body class="min-h-screen bg-slate-100 text-slate-900 antialiased">
+        <!-- Wrapper Alpine.js -->
+        <div
+            class="flex min-h-screen bg-slate-100"
+            x-data="{ sidebarOpen: false, userDropdown: false, userMenuOpen: false, ticketMenuOpen: false }"
+        >
+            <!-- Fundamental: Garis aksen ungu di bagian paling atas halaman -->
+            <div class="fixed inset-x-0 top-0 z-50 h-1.5 bg-[#00008B]"></div>
+
+            <!-- ========================================== -->
+            <!-- SIDEBAR -->
+            <!-- ========================================== -->
+            <aside
+                class="fixed inset-y-0 left-0 z-40 mt-1.5 w-64 transform bg-white shadow-xl transition-transform duration-300 lg:static lg:translate-x-0"
+                :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
+            >
+                <!-- Logo Header -->
+                <div
+                    class="flex h-20 items-center justify-between px-6 border-b border-slate-100"
+                >
+                    <!-- Disesuaikan ke assets/logo-nayaka.png -->
+                    <img
+                        src="assets/logo.png"
+                        alt="NAYAKA"
+                        class="h-10 w-auto object-contain"
+                        onerror="
+                            this.outerHTML =
+                                '<span class=\'text-xl font-black text-[#00008B]\'>NAYAKA MCU</span>'
+                        "
+                    />
+                    <button
+                        @click="sidebarOpen = false"
+                        class="text-slate-400 hover:text-slate-600 lg:hidden"
+                    >
+                        <svg
+                            class="h-6 w-6"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"
+                            />
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Navigation Menu -->
+                <nav class="space-y-1.5 p-4 text-sm font-medium text-slate-600">
+                    <!-- Dashboard (Active) -->
+                    <a
+                        href="#"
+                        class="flex items-center gap-3 rounded-xl px-4 py-3 transition-all bg-[#00008B] text-white shadow-md shadow-[#00008B]/20"
+                    >
+                        <svg
+                            class="h-5 w-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                            />
+                        </svg>
+                        <span>Dashboard</span>
+                    </a>
+
+                    <!-- Ticketing -->
+                    <div>
+                        <button
+                            type="button"
+                            @click="ticketMenuOpen = !ticketMenuOpen"
+                            class="flex w-full items-center gap-3 rounded-xl px-4 py-3 transition-all hover:bg-slate-100 hover:text-[#00008B]"
+                        >
+                            <svg
+                                class="h-5 w-5"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 002 2h14a2 2 0 002-2V7a2 2 0 00-2-2H5zM5 13a2 2 0 00-2 2v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 00-2-2H5z"
+                                />
+                            </svg>
+                            <span class="flex-1 text-left">Ticketing</span>
+                            <svg
+                                class="h-4 w-4 transition-transform"
+                                :class="ticketMenuOpen ? 'rotate-180' : ''"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M19 9l-7 7-7-7"
+                                />
+                            </svg>
+                        </button>
+                        <div
+                            x-show="ticketMenuOpen"
+                            x-transition
+                            x-cloak
+                            class="mt-1 space-y-1 pl-8"
+                        >
+                            <a
+                                href="#"
+                                class="block rounded-lg px-4 py-2.5 transition hover:bg-slate-100 hover:text-[#00008B]"
+                                >List Ticket</a
+                            >
+                            <a
+                                href="#"
+                                class="block rounded-lg px-4 py-2.5 transition hover:bg-slate-100 hover:text-[#00008B]"
+                                >Approval</a
+                            >
+                        </div>
+                    </div>
+
+                    <!-- Divisi -->
+                    <a
+                        href="#"
+                        class="flex items-center gap-3 rounded-xl px-4 py-3 transition-all hover:bg-slate-100 hover:text-[#00008B]"
+                    >
+                        <svg
+                            class="h-5 w-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                            />
+                        </svg>
+                        <span>Divisi</span>
+                    </a>
+
+                    <!-- Branch Office -->
+                    <a
+                        href="#"
+                        class="flex items-center gap-3 rounded-xl px-4 py-3 transition-all hover:bg-slate-100 hover:text-[#00008B]"
+                    >
+                        <svg
+                            class="h-5 w-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                            />
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                            />
+                        </svg>
+                        <span>Branch Office</span>
+                    </a>
+
+                    <!-- User -->
+                    <div>
+                        <button
+                            type="button"
+                            @click="userMenuOpen = !userMenuOpen"
+                            class="flex w-full items-center gap-3 rounded-xl px-4 py-3 transition-all hover:bg-slate-100 hover:text-[#00008B]"
+                        >
+                            <svg
+                                class="h-5 w-5"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+                                />
+                            </svg>
+                            <span class="flex-1 text-left">User</span>
+                            <svg
+                                class="h-4 w-4 transition-transform"
+                                :class="userMenuOpen ? 'rotate-180' : ''"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M19 9l-7 7-7-7"
+                                />
+                            </svg>
+                        </button>
+                        <div
+                            x-show="userMenuOpen"
+                            x-transition
+                            x-cloak
+                            class="mt-1 space-y-1 pl-8"
+                        >
+                            <a
+                                href="#"
+                                class="block rounded-lg px-4 py-2.5 transition hover:bg-slate-100 hover:text-[#00008B]"
+                                >Data</a
+                            >
+                            <a
+                                href="#"
+                                class="block rounded-lg px-4 py-2.5 transition hover:bg-slate-100 hover:text-[#00008B]"
+                                >Role</a
+                            >
+                        </div>
+                    </div>
+
+                    <!-- Audit -->
+                    <a
+                        href="#"
+                        class="flex items-center gap-3 rounded-xl px-4 py-3 transition-all hover:bg-slate-100 hover:text-[#00008B]"
+                    >
+                        <svg
+                            class="h-5 w-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                            />
+                        </svg>
+                        <span>Audit</span>
+                    </a>
+                </nav>
+
+                <!-- Sidebar Footer Branding -->
+                <div class="absolute bottom-6 inset-x-6">
+                    <p class="text-xs text-center text-slate-400">
+                        &copy; 2026 PT. Nayaka Era Husada
+                    </p>
+                </div>
+            </aside>
+
+            <!-- Overlay Mobile -->
+            <div
+                x-show="sidebarOpen"
+                @click="sidebarOpen = false"
+                class="fixed inset-0 z-30 bg-slate-900/50 lg:hidden"
+            ></div>
+
+            <!-- ========================================== -->
+            <!-- MAIN CONTENT AREA -->
+            <!-- ========================================== -->
+            <div class="flex flex-1 flex-col overflow-x-hidden mt-1.5">
+                <!-- NAVBAR ATAS -->
+                <header
+                    class="flex h-20 items-center justify-between border-b border-slate-200 bg-white px-6 lg:px-8"
+                >
+                    <div class="flex items-center gap-4">
+                        <button
+                            @click="sidebarOpen = !sidebarOpen"
+                            class="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden"
+                        >
+                            <svg
+                                class="h-6 w-6"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M4 6h16M4 12h16M4 18h16"
+                                />
+                            </svg>
+                        </button>
+                        <div>
+                            <h1 class="text-xl font-bold text-slate-800">
+                                Dashboard Utama
+                            </h1>
+                            <p class="text-xs text-slate-400">
+                                Ringkasan sistem ticketing MCU
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Profile Dropdown (Pojok Kanan) -->
+                    <div class="relative">
+                        <button
+                            @click="userDropdown = !userDropdown"
+                            @click.outside="userDropdown = false"
+                            class="flex items-center gap-3 rounded-xl p-1.5 transition hover:bg-slate-100 focus:outline-none"
+                        >
+                            <div
+                                class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#00008B] font-bold text-white shadow-md"
+                            >
+                                AD
+                            </div>
+                            <div class="hidden text-left sm:block">
+                                <p
+                                    class="text-sm font-semibold text-slate-800 leading-tight"
+                                >
+                                    Admin Nayaka
+                                </p>
+                                <p class="text-xs text-slate-500">
+                                    IT Division
+                                </p>
+                            </div>
+                            <svg
+                                class="h-4 w-4 text-slate-400 transition-transform duration-200"
+                                :class="userDropdown ? 'rotate-180' : ''"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M19 9l-7 7-7-7"
+                                />
+                            </svg>
+                        </button>
+
+                        <!-- Dropdown Menu -->
+                        <div
+                            x-show="userDropdown"
+                            x-transition:enter="transition ease-out duration-100"
+                            x-transition:enter-start="transform opacity-0 scale-95"
+                            x-transition:enter-end="transform opacity-100 scale-100"
+                            x-transition:leave="transition ease-in duration-75"
+                            x-transition:leave-start="transform opacity-100 scale-100"
+                            x-transition:leave-end="transform opacity-0 scale-95"
+                            class="absolute right-0 mt-2 w-56 rounded-2xl bg-white py-2 shadow-xl border border-slate-100 z-50"
+                        >
+                            <!-- Profile Header Mobile Only -->
+                            <div
+                                class="border-b border-slate-100 px-4 py-3 sm:hidden"
+                            >
+                                <p class="text-sm font-bold text-slate-800">
+                                    Admin Nayaka
+                                </p>
+                                <p class="text-xs text-slate-500">
+                                    IT Division
+                                </p>
+                            </div>
+
+                            <a
+                                href="#"
+                                class="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-[#00008B] transition-colors"
+                            >
+                                <svg
+                                    class="h-4 w-4 text-slate-400"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                                    />
+                                </svg>
+                                Profil Saya
+                            </a>
+
+                            <div class="my-1 border-t border-slate-100"></div>
+
+                            <!-- Logout Button -->
+                            <a
+                                href="#"
+                                class="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+                            >
+                                <svg
+                                    class="h-4 w-4 text-red-500"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                                    />
+                                </svg>
+                                Keluar
+                            </a>
+                        </div>
+                    </div>
+                </header>
+
+                <main class="p-6 lg:p-8 space-y-8">
+                    <!-- 1. BARIS 3 ITEM CARD SUMMARY (JUMLAH TICKET, APPROVE, REJECT) -->
+                    <div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                        <!-- Card 1: Total Ticket -->
+                        <div
+                            class="flex items-center justify-between rounded-2xl bg-white p-6 shadow-md shadow-slate-200/50 border border-slate-100"
+                        >
+                            <div>
+                                <p
+                                    class="text-xs font-semibold uppercase tracking-wider text-slate-400"
+                                >
+                                    Total Tiket
+                                </p>
+                                <h3
+                                    class="mt-2 text-3xl font-extrabold text-slate-800"
+                                >
+                                    1,284
+                                </h3>
+                                <p class="mt-1 text-xs text-slate-500">
+                                    <span class="font-semibold text-blue-600"
+                                        >+12%</span
+                                    >
+                                    bulan ini
+                                </p>
+                            </div>
+                            <div
+                                class="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-[#00008B]"
+                            >
+                                <svg
+                                    class="h-7 w-7"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 002 2h14a2 2 0 002-2V7a2 2 0 00-2-2H5zM5 13a2 2 0 00-2 2v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 00-2-2H5z"
+                                    />
+                                </svg>
+                            </div>
+                        </div>
+
+                        <!-- Card 2: Approved -->
+                        <div
+                            class="flex items-center justify-between rounded-2xl bg-white p-6 shadow-md shadow-slate-200/50 border border-slate-100"
+                        >
+                            <div>
+                                <p
+                                    class="text-xs font-semibold uppercase tracking-wider text-slate-400"
+                                >
+                                    Disetujui (Approve)
+                                </p>
+                                <h3
+                                    class="mt-2 text-3xl font-extrabold text-slate-800"
+                                >
+                                    956
+                                </h3>
+                                <p
+                                    class="mt-1 text-xs text-emerald-600 font-semibold"
+                                >
+                                    74% Penyelesaian
+                                </p>
+                            </div>
+                            <div
+                                class="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-[#008000]"
+                            >
+                                <svg
+                                    class="h-7 w-7"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                                    />
+                                </svg>
+                            </div>
+                        </div>
+
+                        <!-- Card 3: Rejected -->
+                        <div
+                            class="flex items-center justify-between rounded-2xl bg-white p-6 shadow-md shadow-slate-200/50 border border-slate-100"
+                        >
+                            <div>
+                                <p
+                                    class="text-xs font-semibold uppercase tracking-wider text-slate-400"
+                                >
+                                    Ditolak (Reject)
+                                </p>
+                                <h3
+                                    class="mt-2 text-3xl font-extrabold text-slate-800"
+                                >
+                                    45
+                                </h3>
+                                <p
+                                    class="mt-1 text-xs text-amber-600 font-semibold"
+                                >
+                                    3.5% Dari total tiket
+                                </p>
+                            </div>
+                            <div
+                                class="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-[#FF8C00]"
+                            >
+                                <svg
+                                    class="h-7 w-7"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+                                    />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. LINE DASHBOARD (LINE CHART STATISTIK TIKET DIAJUKAN) -->
+                    <div
+                        class="rounded-2xl bg-white p-6 shadow-md shadow-slate-200/50 border border-slate-100"
+                    >
+                        <div class="mb-6 flex items-center justify-between">
+                            <div>
+                                <h2 class="text-lg font-bold text-slate-800">
+                                    Statistik Tiket Diajukan
+                                </h2>
+                                <p class="text-xs text-slate-400">
+                                    Tren pengajuan tiket operasional per bulan
+                                </p>
+                            </div>
+                            <span
+                                class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600"
+                                >2026</span
+                            >
+                        </div>
+                        <div class="h-72 w-full">
+                            <canvas id="ticketLineChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- 3. TABLE DATA DUMMY TIKET -->
+                    <div
+                        class="overflow-hidden rounded-2xl bg-white shadow-md shadow-slate-200/50 border border-slate-100"
+                    >
+                        <div
+                            class="flex items-center justify-between p-6 border-b border-slate-100"
+                        >
+                            <div>
+                                <h2 class="text-lg font-bold text-slate-800">
+                                    Daftar Tiket Terbaru
+                                </h2>
+                                <p class="text-xs text-slate-400">
+                                    Data pengajuan tiket secara real-time
+                                </p>
+                            </div>
+                            <a
+                                href="#"
+                                class="text-xs font-semibold text-[#00008B] hover:underline"
+                                >Lihat Semua &rarr;</a
+                            >
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table
+                                class="w-full text-left text-sm text-slate-600"
+                            >
+                                <thead
+                                    class="bg-slate-50 text-xs font-semibold uppercase text-slate-400"
+                                >
+                                    <tr>
+                                        <th class="px-6 py-4">No. Tiket</th>
+                                        <th class="px-6 py-4">Pengaju</th>
+                                        <th class="px-6 py-4">Divisi</th>
+                                        <th class="px-6 py-4">
+                                            Judul Permintaan
+                                        </th>
+                                        <th class="px-6 py-4">Tanggal</th>
+                                        <th class="px-6 py-4">Status</th>
+                                        <th class="px-6 py-4 text-right">
+                                            Aksi
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <button></button>
+                                <tbody class="divide-y divide-slate-100">
+                                    <!-- Baris Dummy 1 -->
+                                    <tr
+                                        class="hover:bg-slate-50/50 transition-colors"
+                                    >
+                                        <td
+                                            class="px-6 py-4 font-bold text-[#00008B]"
+                                        >
+                                            #T-001
+                                        </td>
+                                        <td
+                                            class="px-6 py-4 font-medium text-slate-800"
+                                        >
+                                            Budi Santoso
+                                        </td>
+                                        <td class="px-6 py-4">Operasional</td>
+                                        <td class="max-w-xs px-6 py-4">
+                                            <span class="block truncate"
+                                                >Permintaan Perbaikan Alat
+                                                Medis</span
+                                            >
+                                        </td>
+                                        <td
+                                            class="px-6 py-4 text-xs text-slate-400"
+                                        >
+                                            08 Okt 2026
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span
+                                                class="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-700 ring-1 ring-inset ring-yellow-600/20"
+                                                >Pending</span
+                                            >
+                                        </td>
+                                        <td class="px-6 py-4 text-right">
+                                            <a
+                                                href="#"
+                                                class="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-[#00008B] hover:text-white transition-colors"
+                                                >Detail</a
+                                            >
+                                        </td>
+                                    </tr>
+
+                                    <!-- Baris Dummy 2 -->
+                                    <tr
+                                        class="hover:bg-slate-50/50 transition-colors"
+                                    >
+                                        <td
+                                            class="px-6 py-4 font-bold text-[#00008B]"
+                                        >
+                                            #T-002
+                                        </td>
+                                        <td
+                                            class="px-6 py-4 font-medium text-slate-800"
+                                        >
+                                            Siti Aminah
+                                        </td>
+                                        <td class="px-6 py-4">Keuangan</td>
+                                        <td class="max-w-xs px-6 py-4">
+                                            <span class="block truncate"
+                                                >Pengajuan Biaya MCU
+                                                Tahunan</span
+                                            >
+                                        </td>
+                                        <td
+                                            class="px-6 py-4 text-xs text-slate-400"
+                                        >
+                                            07 Okt 2026
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span
+                                                class="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20"
+                                                >Approved</span
+                                            >
+                                        </td>
+                                        <td class="px-6 py-4 text-right">
+                                            <a
+                                                href="#"
+                                                class="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-[#00008B] hover:text-white transition-colors"
+                                                >Detail</a
+                                            >
+                                        </td>
+                                    </tr>
+
+                                    <!-- Baris Dummy 3 -->
+                                    <tr
+                                        class="hover:bg-slate-50/50 transition-colors"
+                                    >
+                                        <td
+                                            class="px-6 py-4 font-bold text-[#00008B]"
+                                        >
+                                            #T-003
+                                        </td>
+                                        <td
+                                            class="px-6 py-4 font-medium text-slate-800"
+                                        >
+                                            Andi Saputra
+                                        </td>
+                                        <td class="px-6 py-4">HRD</td>
+                                        <td class="max-w-xs px-6 py-4">
+                                            <span class="block truncate"
+                                                >Perubahan Jadwal MCU Karyawan
+                                                Baru</span
+                                            >
+                                        </td>
+                                        <td
+                                            class="px-6 py-4 text-xs text-slate-400"
+                                        >
+                                            06 Okt 2026
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span
+                                                class="inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/10"
+                                                >Rejected</span
+                                            >
+                                        </td>
+                                        <td class="px-6 py-4 text-right">
+                                            <a
+                                                href="#"
+                                                class="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-[#00008B] hover:text-white transition-colors"
+                                                >Detail</a
+                                            >
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </main>
+            </div>
+        </div>
+
+        <!-- Script inisialisasi Chart.js -->
+        <script>
+            document.addEventListener("DOMContentLoaded", function () {
+                const ctx = document
+                    .getElementById("ticketLineChart")
+                    .getContext("2d");
+
+                // Gradient Warna Biru Nayaka
+                const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+                gradient.addColorStop(0, "rgba(0, 0, 139, 0.25)");
+                gradient.addColorStop(1, "rgba(0, 0, 139, 0.0)");
+
+                // Data dummy statis pengganti json
+                const dummyData = [
+                    45, 60, 50, 75, 90, 85, 110, 100, 130, 125, 150, 140,
+                ];
+
+                new Chart(ctx, {
+                    type: "line",
+                    data: {
+                        labels: [
+                            "Jan",
+                            "Feb",
+                            "Mar",
+                            "Apr",
+                            "Mei",
+                            "Jun",
+                            "Jul",
+                            "Agt",
+                            "Sep",
+                            "Okt",
+                            "Nov",
+                            "Des",
+                        ],
+                        datasets: [
+                            {
+                                label: "Tiket Diajukan",
+                                data: dummyData,
+                                borderColor: "#00008B",
+                                borderWidth: 3,
+                                backgroundColor: gradient,
+                                fill: true,
+                                tension: 0.4,
+                                pointBackgroundColor: "#00008B",
+                                pointHoverRadius: 6,
+                            },
+                        ],
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false,
+                            },
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: {
+                                    color: "#f1f5f9",
+                                },
+                                ticks: {
+                                    color: "#94a3b8",
+                                },
+                            },
+                            x: {
+                                grid: {
+                                    display: false,
+                                },
+                                ticks: {
+                                    color: "#94a3b8",
+                                },
+                            },
+                        },
+                    },
+                });
+            });
+        </script>
+    </body>
+</html>
