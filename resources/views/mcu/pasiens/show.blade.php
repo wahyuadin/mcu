@@ -1,41 +1,86 @@
 @extends('layouts.mcu')
-@section('title', 'Detail Pasien')
+@section('title', $identity?->nama ?? $pasien->nama_karyawan)
 @section('content')
-<div class="mx-auto max-w-6xl space-y-6">
-    <div class="flex flex-wrap items-center justify-between gap-4">
-        <a href="{{ route('pasien.index') }}" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-[#00008B]"><svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>Kembali ke daftar pasien</a>
-        @can('manage-mcu')<div class="flex gap-2"><a href="{{ route('pasien.edit', $pasien) }}" class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm hover:border-[#00008B] hover:text-[#00008B]"><svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7m-1.5-9.5a2.12 2.12 0 013 3L12 14l-4 1 1-4 7.5-7.5z"/></svg>Ubah</a><form action="{{ route('pasien.destroy', $pasien) }}" method="POST" onsubmit="return confirm('Hapus pasien ini?')">@csrf @method('DELETE')<button class="inline-flex items-center rounded-xl border border-red-100 bg-red-50 px-4 py-2.5 text-sm font-bold text-red-700 hover:bg-red-100">Hapus</button></form></div>@endcan
+@php
+    $patientName = $identity?->nama ?? $pasien->nama_karyawan;
+    $birthDate = $identity?->tanggal_lahir ?? $pasien->tanggal_lahir;
+    $gender = $identity?->jenis_kelamin ?? $pasien->jenis_kelamin;
+    $photoEpisode = $episodes->first(fn ($episode) => $episode->foto && str_starts_with($episode->foto, 'mcu/'.$episode->id.'/'));
+    $statusLabels = ['belum' => 'Terdaftar', 'proses' => 'Dalam pemeriksaan', 'siap_finalisasi' => 'Siap finalisasi', 'selesai' => 'Hasil final', 'batal' => 'Batal', 'tidak_hadir' => 'Tidak hadir'];
+@endphp
+<div class="mx-auto grid max-w-7xl gap-7">
+    <a href="{{ route('pasien.index') }}" class="justify-self-start text-sm font-semibold text-slate-500">← Daftar pasien</a>
+    <div class="flex flex-wrap items-start justify-between gap-5">
+        <div class="min-w-0"><h2 class="break-words text-3xl font-bold text-slate-900">{{ $patientName }}</h2><p class="mt-3 text-sm text-slate-500 sm:text-base">Identitas dan riwayat pekerjaan untuk setiap kunjungan MCU.</p></div>
+        @can('manage-mcu')<a href="{{ route('pasien.create', ['pasien_id' => $pasien->pasien_id]) }}" class="rounded-xl bg-emerald-700 px-6 py-3 text-center text-sm font-bold text-white hover:bg-emerald-800">+ Buat kunjungan MCU</a>@endcan
     </div>
 
-    <section class="relative overflow-hidden rounded-3xl bg-[#00008B] p-6 text-white shadow-xl shadow-blue-950/10 sm:p-8">
-        <div class="absolute -right-16 -top-20 h-64 w-64 rounded-full bg-white/10"></div>
-        <div class="relative flex flex-col gap-6 sm:flex-row sm:items-center">
-            <div class="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/15 text-2xl font-extrabold shadow-inner">{{ strtoupper(substr($pasien->nama_karyawan, 0, 2)) }}</div>
-            <div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-3"><h2 class="text-2xl font-bold sm:text-3xl">{{ $pasien->nama_karyawan }}</h2><span class="rounded-full bg-white/15 px-3 py-1 text-xs font-bold capitalize ring-1 ring-white/20">{{ $pasien->status_pemeriksaan === 'belum' ? 'Belum diperiksa' : $pasien->status_pemeriksaan }}</span></div><p class="mt-2 text-sm text-blue-100">{{ $pasien->perusahaan->nama_perusahaan }} · {{ $pasien->bagian ?: 'Departemen belum diisi' }}</p><div class="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-blue-100"><span>NIK: <strong class="text-white">{{ $pasien->nik ?? '—' }}</strong></span><span>No. Karyawan: <strong class="text-white">{{ $pasien->nip ?? '—' }}</strong></span></div></div>
-            @can('examine-mcu')<a href="{{ route('pemeriksaan.edit', [$pasien->rencanaKunjungan, $pasien]) }}" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#FF8C00] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-orange-950/20 active:scale-[.97]"><svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Buka Pemeriksaan</a>@endcan
-        </div>
-    </section>
-
-    <div class="grid gap-6 lg:grid-cols-[1fr_360px]">
-        <section class="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-sm">
-            <div class="border-b border-slate-100 px-6 py-5"><h3 class="font-bold text-slate-900">Informasi pribadi</h3><p class="mt-1 text-sm text-slate-400">Identitas dan kontak pasien.</p></div>
-            <dl class="grid sm:grid-cols-2">
-                @foreach(['Nama lengkap' => $pasien->nama_karyawan, 'NIK' => $pasien->nik, 'Tanggal lahir' => $pasien->tanggal_lahir?->translatedFormat('d F Y'), 'Usia' => $pasien->usia ? $pasien->usia.' tahun' : null, 'Jenis kelamin' => $pasien->jenis_kelamin === 'P' ? 'Perempuan' : 'Laki-laki', 'Nomor telepon' => $pasien->telepon] as $label => $value)
-                    <div class="border-b border-slate-100 px-6 py-4 odd:sm:border-r"><dt class="text-xs font-semibold uppercase tracking-wider text-slate-400">{{ $label }}</dt><dd class="mt-1.5 text-sm font-bold text-slate-800">{{ $value ?? '—' }}</dd></div>
-                @endforeach
-            </dl>
-            <div class="border-b border-slate-100 px-6 py-5"><h3 class="font-bold text-slate-900">Informasi pekerjaan</h3></div>
-            <dl class="grid sm:grid-cols-2">
-                @foreach(['Perusahaan' => $pasien->perusahaan->nama_perusahaan, 'Nomor karyawan' => $pasien->nip, 'Departemen' => $pasien->bagian, 'Jabatan' => $pasien->jabatan] as $label => $value)
-                    <div class="border-b border-slate-100 px-6 py-4 odd:sm:border-r"><dt class="text-xs font-semibold uppercase tracking-wider text-slate-400">{{ $label }}</dt><dd class="mt-1.5 text-sm font-bold text-slate-800">{{ $value ?? '—' }}</dd></div>
+    <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2.3fr)]">
+        <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
+            <h3 class="text-xl font-bold">Profil pasien</h3>
+            <div class="my-8 grid justify-items-center gap-4 text-center">
+                @if($photoEpisode)
+                    <img src="{{ route('pemeriksaan.attachment', [$photoEpisode->rencana_kunjungan_id, $photoEpisode, 'foto', 'v' => hash('sha256', $photoEpisode->foto)]) }}" alt="Foto {{ $patientName }}" class="h-40 w-40 rounded-3xl object-cover">
+                @else
+                    <div class="flex h-40 w-40 items-center justify-center rounded-3xl bg-blue-50 text-slate-400"><svg aria-hidden="true" class="h-32 w-32" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" stroke-width="1"/><path d="M4 21v-2a8 8 0 0116 0v2" stroke-width="1"/></svg></div>
+                @endif
+                <h4 class="break-words text-xl font-bold">{{ $patientName }}</h4>
+                <p class="max-w-full break-all text-xs text-slate-500">ID pasien · {{ $pasien->pasien_id }}</p>
+            </div>
+            <dl class="grid gap-6 border-t border-slate-200 pt-6 text-sm">
+                <div><dt class="text-slate-500">Tempat lahir</dt><dd class="mt-2 break-words font-bold text-slate-900">{{ $identity?->tempat_lahir ?? $pasien->tempat_lahir ?? 'Belum dicatat' }}</dd></div>
+                @foreach(['Tanggal lahir' => $birthDate?->translatedFormat('d F Y'), 'Jenis kelamin' => $gender === 'P' ? 'Perempuan' : 'Laki-laki', 'Umur' => $patientAge === null ? null : $patientAge.' tahun', 'No. karyawan' => $currentEmployment->nip, 'Perusahaan' => $currentEmployment->perusahaan->nama_perusahaan, 'NIK identitas' => $identity?->nik ?? $pasien->nik, 'Telepon' => $identity?->telepon ?? $pasien->telepon] as $label => $value)
+                    <div><dt class="text-slate-500">{{ $label }}</dt><dd class="mt-2 break-words font-bold text-slate-900">{{ $value ?? 'Belum dicatat' }}</dd></div>
                 @endforeach
             </dl>
         </section>
 
-        <aside class="space-y-4">
-            <section class="rounded-2xl border border-slate-200/70 bg-white p-6 shadow-sm"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Kunjungan MCU</p><h3 class="mt-2 text-lg font-bold text-slate-900">{{ $pasien->rencanaKunjungan->nomor_kunjungan }}</h3><p class="mt-1 text-sm text-slate-500">{{ $pasien->rencanaKunjungan->periode_kunjungan }}</p><div class="my-5 h-px bg-slate-100"></div><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Paket pemeriksaan</p>@can('manage-mcu')<a href="{{ route('paket.show', $pasien->paket) }}" class="mt-2 flex items-center justify-between rounded-xl bg-blue-50 p-4 text-sm font-bold text-[#00008B]"><span>{{ $pasien->paket->nama_paket }}</span><span>→</span></a>@else<div class="mt-2 rounded-xl bg-blue-50 p-4 text-sm font-bold text-[#00008B]">{{ $pasien->paket->nama_paket }}</div>@endcan</section>
-            <section class="rounded-2xl border border-slate-200/70 bg-white p-6 shadow-sm"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Status pemeriksaan</p><div class="mt-4 flex items-center gap-3"><span class="relative flex h-3 w-3"><span class="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-30"></span><span class="relative inline-flex h-3 w-3 rounded-full {{ $pasien->status_pemeriksaan === 'selesai' ? 'bg-emerald-500' : 'bg-amber-500' }}"></span></span><p class="font-bold capitalize text-slate-800">{{ $pasien->status_pemeriksaan === 'belum' ? 'Belum diperiksa' : $pasien->status_pemeriksaan }}</p></div></section>
-        </aside>
+        <div class="grid min-w-0 gap-6">
+            <section class="grid gap-6 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
+                <div class="flex flex-wrap items-start justify-between gap-3"><div><h3 class="text-xl font-bold">Pekerjaan saat ini</h3><p class="mt-2 text-sm text-slate-500">Penempatan terakhir yang tercatat pada kunjungan MCU.</p></div><span class="rounded-full bg-emerald-50 px-5 py-2 text-xs font-bold text-emerald-700">Terbaru tercatat</span></div>
+                <dl class="grid gap-6 text-sm sm:grid-cols-2">
+                    @foreach(['Perusahaan' => $currentEmployment->perusahaan->nama_perusahaan, 'Departemen' => $currentEmployment->bagian, 'No. karyawan' => $currentEmployment->nip, 'Mulai penempatan' => null, 'Jabatan' => $currentEmployment->jabatan, 'Tanggal tercatat' => $currentEmployment->tanggal_mcu?->translatedFormat('d F Y')] as $label => $value)
+                        <div><dt class="text-slate-500">{{ $label }}</dt><dd class="mt-2 break-words text-base font-bold">{{ $value ?? 'Belum dicatat' }}</dd></div>
+                    @endforeach
+                </dl>
+            </section>
+
+            <section class="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
+                <div><h3 class="text-xl font-bold">Riwayat pekerjaan</h3><p class="mt-2 text-sm text-slate-500">Penempatan pada setiap MCU. Tanggal tercatat bukan tanggal mulai atau akhir masa kerja.</p></div>
+                <div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead class="bg-slate-50 text-slate-500"><tr><th class="rounded-l-xl p-3 font-semibold">Departemen / perusahaan</th><th class="p-3 font-semibold">Tanggal tercatat</th><th class="rounded-r-xl p-3 font-semibold">Catatan</th></tr></thead><tbody>
+                    @foreach($episodes as $episode)<tr><td class="p-3"><strong class="block">{{ $episode->bagian ?? 'Belum dicatat' }}</strong><span class="mt-1 block text-xs text-slate-500">{{ $episode->perusahaan->nama_perusahaan }} · {{ $episode->jabatan ?? 'Jabatan belum dicatat' }}</span></td><td class="whitespace-nowrap p-3 text-slate-500">{{ $episode->tanggal_mcu?->translatedFormat('d M Y') ?? 'Belum dicatat' }}</td><td class="p-3"><span class="whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold {{ $episode->id === $currentEmployment->id ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500' }}">{{ $episode->id === $currentEmployment->id ? 'Terbaru' : 'Riwayat MCU' }}</span></td></tr>@endforeach
+                </tbody></table></div>
+            </section>
+
+            <section class="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
+                <div><h3 class="text-xl font-bold">Riwayat MCU</h3><p class="mt-2 text-sm text-slate-500">Kunjungan tetap menyimpan penempatan saat pemeriksaan.</p></div>
+                <div class="divide-y divide-slate-200">
+                    @foreach($episodes as $episode)
+                        <div class="grid items-center gap-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                            <div class="min-w-0"><strong class="block">{{ $episode->tanggal_mcu?->translatedFormat('d M Y') ?? 'Tanggal MCU belum diisi' }}</strong><p class="mt-2 break-all text-sm text-slate-500">{{ $episode->nomor_mcu }}</p><p class="mt-1 text-xs text-slate-500">{{ $episode->perusahaan->nama_perusahaan }} · {{ $episode->bagian ?? 'Departemen belum dicatat' }} · {{ $episode->paket->nama_paket }}</p></div>
+                            <span class="justify-self-start rounded-full px-4 py-2 text-center text-xs font-bold {{ $episode->status_pemeriksaan === 'selesai' ? 'bg-emerald-50 text-emerald-700' : (in_array($episode->status_pemeriksaan, ['batal', 'tidak_hadir'], true) ? 'bg-slate-100 text-slate-500' : 'bg-blue-50 text-blue-800') }}">{{ $statusLabels[$episode->status_pemeriksaan] ?? $episode->status_pemeriksaan }}</span>
+                            @can('examine-mcu')<a href="{{ route('pemeriksaan.edit', [$episode->rencanaKunjungan, $episode]) }}" class="rounded-xl border border-slate-300 px-5 py-3 text-center text-sm font-bold hover:border-emerald-700 hover:bg-emerald-50">Lihat kunjungan</a>@else<a href="{{ route('kunjungan-mcu.show', $episode->rencanaKunjungan) }}" class="rounded-xl border border-slate-300 px-5 py-3 text-center text-sm font-bold">Lihat kunjungan</a>@endcan
+                        </div>
+                    @endforeach
+                </div>
+            </section>
+        </div>
     </div>
+
+    @can('manage-mcu')
+        @if(!$pasien->rencanaKunjungan->is_closing && $pasien->anamnesa?->status !== 'final')
+            <details class="rounded-2xl border border-slate-200 bg-white p-6"><summary class="cursor-pointer font-semibold">Kelola pendaftaran episode {{ $pasien->nomor_mcu }}</summary>
+                <div class="mt-5 flex flex-wrap gap-3"><a href="{{ route('pasien.edit', $pasien) }}" class="rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold">Ubah identitas episode</a>
+                    @if(!$pasien->anamnesa)<form method="POST" action="{{ route('pasien.destroy', $pasien) }}" onsubmit="return confirm('Hapus pendaftaran episode ini?')">@csrf @method('DELETE')<button class="rounded-xl border border-red-200 px-4 py-3 text-sm text-red-700">Hapus pendaftaran</button></form>@endif
+                </div>
+                <form method="POST" action="{{ route('peserta.status', [$pasien->rencanaKunjungan, $pasien]) }}" class="mt-5 grid gap-4">@csrf
+                    @include('mcu.field', ['field' => 'status', 'label' => 'Batal / tidak hadir / aktifkan kembali peserta', 'type' => 'select', 'value' => null, 'options' => ['batal' => 'Batal', 'tidak_hadir' => 'Tidak hadir', 'belum' => 'Aktifkan kembali']])
+                    @include('mcu.field', ['field' => 'reason', 'label' => 'Alasan perubahan status (wajib)', 'type' => 'textarea', 'value' => null])
+                    <button class="justify-self-start rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold">Simpan status peserta</button>
+                </form>
+            </details>
+        @endif
+    @endcan
+    @if($pasien->alasan_status)<p class="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">Alasan status terakhir: {{ $pasien->alasan_status }}</p>@endif
 </div>
 @endsection

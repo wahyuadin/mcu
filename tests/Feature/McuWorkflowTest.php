@@ -8,6 +8,7 @@ use App\Models\Perusahaan;
 use App\Models\RencanaKunjungan;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
 class McuWorkflowTest extends TestCase
@@ -67,6 +68,7 @@ class McuWorkflowTest extends TestCase
         $package = Paket::create(['perusahaan_id' => $company->id, 'rencana_kunjungan_id' => $visit->id, 'nama_paket' => 'Tanpa TBC', 'active_items' => ['tinggi_badan' => true, 'tbc' => false]]);
         $participant = Karyawan::create(['perusahaan_id' => $company->id, 'rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id, 'nama_karyawan' => 'Andi']);
         $this->get(route('pemeriksaan.edit', [$other, $participant]))->assertNotFound();
+        $this->post(route('pemeriksaan.photo', [$visit, $participant]), ['foto_pasien' => UploadedFile::fake()->image('foto.png')])->assertSessionHasNoErrors();
         $this->put(route('pemeriksaan.update', [$visit, $participant]), ['status' => 'draft', 'tinggi_badan' => 172, 'history' => ['tbc' => 1], 'berat_badan' => 90])->assertRedirect();
         $exam = $participant->fresh()->anamnesa;
         $this->assertSame('172.00', $exam->tinggi_badan);
@@ -101,15 +103,18 @@ class McuWorkflowTest extends TestCase
         $this->assertSoftDeleted($package);
     }
 
-    public function test_patient_cannot_be_assigned_to_package_from_another_visit(): void
+    public function test_patient_can_reuse_package_from_another_visit_and_auto_bind_it_to_selected_visit(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
         $company = Perusahaan::create(['nama_perusahaan' => 'XYZ']);
         $visit = RencanaKunjungan::create(['perusahaan_id' => $company->id, 'nomor_kunjungan' => 'XYZ-3', 'periode_kunjungan' => 'Oktober']);
         $other = RencanaKunjungan::create(['perusahaan_id' => $company->id, 'nomor_kunjungan' => 'XYZ-4', 'periode_kunjungan' => 'November']);
         $package = Paket::create(['perusahaan_id' => $company->id, 'rencana_kunjungan_id' => $other->id, 'nama_paket' => 'Lain', 'active_items' => ['tbc' => true]]);
-        $this->post(route('pasien.store'), ['rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id, 'nama_karyawan' => 'Siti', 'jenis_kelamin' => 'P'])->assertSessionHasErrors('paket_id');
-        $this->assertDatabaseCount('karyawans', 0);
+        $this->post(route('pasien.store'), ['rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id, 'nama_karyawan' => 'Siti', 'jenis_kelamin' => 'P'])->assertSessionHasNoErrors();
+        $this->assertDatabaseCount('karyawans', 1);
+        $this->assertSame(2, $package->rencanaKunjungans()->count());
+        $this->assertDatabaseHas('karyawans', ['paket_id' => $package->id, 'rencana_kunjungan_id' => $visit->id, 'perusahaan_id' => $company->id]);
+        $this->get(route('pemeriksaan.edit', [$other, Karyawan::firstOrFail()]))->assertNotFound();
     }
 
     public function test_staff_can_view_patients_but_cannot_change_them_or_manage_packages(): void

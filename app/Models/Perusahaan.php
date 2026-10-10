@@ -23,6 +23,7 @@ class Perusahaan extends Model implements Auditable
         'email',
         'pic_nama',
         'pic_kontak',
+        'logo_path',
     ];
 
     /**

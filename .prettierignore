@@ -1,0 +1,11 @@
+/node_modules
+/public/build
+/vendor
+/storage
+/bootstrap/cache
+.phpunit.result.cache
+package-lock.json
+.agents
+.ai
+.claude
+skills

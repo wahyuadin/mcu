@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use OwenIt\Auditing\Auditable as AuditableTrait;
@@ -50,9 +51,9 @@ class RencanaKunjungan extends Model implements Auditable
     /**
      * Relasi ke Paket-Paket yang tersedia di Kunjungan ini
      */
-    public function pakets(): HasMany
+    public function pakets(): BelongsToMany
     {
-        return $this->hasMany(Paket::class, 'rencana_kunjungan_id');
+        return $this->belongsToMany(Paket::class, 'paket_rencana_kunjungan', 'rencana_kunjungan_id', 'paket_id')->withTimestamps();
     }
 
     /**

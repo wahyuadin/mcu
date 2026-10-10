@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\McuCatalog;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use OwenIt\Auditing\Auditable as AuditableTrait;
@@ -23,13 +25,32 @@ class Paket extends Model implements Auditable
         'nama_paket',
         'deskripsi',
         'active_items',
+        'dynamic_schema',
     ];
 
     protected function casts(): array
     {
         return [
             'active_items' => 'array',
+            'dynamic_schema' => 'array',
         ];
+    }
+
+    /**
+     * Preserve bindings for legacy seeders and integrations that still supply the original visit field.
+     */
+    protected static function booted(): void
+    {
+        static::created(function (Paket $paket): void {
+            if ($paket->rencana_kunjungan_id) {
+                $paket->rencanaKunjungans()->syncWithoutDetaching([$paket->rencana_kunjungan_id]);
+            }
+        });
+    }
+
+    public function rencanaKunjungans(): BelongsToMany
+    {
+        return $this->belongsToMany(RencanaKunjungan::class, 'paket_rencana_kunjungan', 'paket_id', 'rencana_kunjungan_id')->withTimestamps();
     }
 
     /**
@@ -57,11 +78,11 @@ class Paket extends Model implements Auditable
     }
 
     /**
-     * Default list of all 44 clinical + anamnesa items available
+     * Catalog of anamnesa, physical examination, laboratory, and supporting tests.
      */
     public static function getDefaultItemCatalog(): array
     {
-        return [
+        $catalog = [
             'anamnesa_riwayat' => [
                 'keluhan_saat_ini' => 'Keluhan Saat Ini',
                 'hipertensi' => 'Riwayat Hipertensi',
@@ -128,6 +149,13 @@ class Paket extends Model implements Auditable
                 'kelainan_saraf_tepi' => 'Kelainan Saraf Tepi',
             ],
         ];
+        $catalog['anamnesa_riwayat'] = McuCatalog::anamnesaLabels() + ['asma' => 'Asma (item lama)', 'ginjal' => 'Penyakit ginjal (item lama)'];
+        foreach (McuCatalog::laboratory() as $group => $items) {
+            $catalog['Laboratorium — '.$group] = array_map(fn (array $item): string => $item['label'], $items);
+        }
+        $catalog['Pemeriksaan penunjang'] = array_map(fn (array $item): string => $item['label'], McuCatalog::supporting());
+
+        return $catalog;
     }
 
     /**
@@ -136,5 +164,10 @@ class Paket extends Model implements Auditable
     public function isItemActive(string $itemKey): bool
     {
         return ($this->active_items[$itemKey] ?? false) === true;
+    }
+
+    public function itemCount(): int
+    {
+        return count(array_filter($this->active_items ?? [])) + collect($this->dynamic_schema ?? [])->sum(fn (array $group): int => count($group['items']));
     }
 }

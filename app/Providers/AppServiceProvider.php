@@ -23,6 +23,6 @@ class AppServiceProvider extends ServiceProvider
     {
         Gate::define('manage-mcu', fn (User $user): bool => $user->role === 'admin');
         Gate::define('view-patients', fn (User $user): bool => in_array($user->role, ['admin', 'petugas', 'dokter'], true));
-        Gate::define('examine-mcu', fn (User $user): bool => in_array($user->role, ['admin', 'dokter'], true));
+        Gate::define('examine-mcu', fn (User $user): bool => in_array($user->role, ['admin', 'petugas', 'dokter'], true));
     }
 }

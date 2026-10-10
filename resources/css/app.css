@@ -4,10 +4,150 @@
 @source '../../storage/framework/views/*.php';
 
 @theme {
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
 
+[data-photo-modal] {
+    opacity: 0;
+    transform: scale(0.97);
+    transform-origin: center;
+    transition:
+        opacity 200ms var(--ease-out),
+        transform 200ms var(--ease-out),
+        display 200ms allow-discrete,
+        overlay 200ms allow-discrete;
+}
+
+[data-photo-modal][open] {
+    opacity: 1;
+    transform: scale(1);
+}
+
+[data-photo-modal]::backdrop {
+    background: rgb(15 23 42 / 60%);
+    opacity: 0;
+    transition:
+        opacity 200ms var(--ease-out),
+        display 200ms allow-discrete,
+        overlay 200ms allow-discrete;
+}
+
+[data-photo-modal][open]::backdrop {
+    opacity: 1;
+}
+
+@starting-style {
+    [data-photo-modal][open] {
+        opacity: 0;
+        transform: scale(0.97);
+    }
+
+    [data-photo-modal][open]::backdrop {
+        opacity: 0;
+    }
+}
+
+[data-photo-modal-open] {
+    touch-action: manipulation;
+    transition: transform 160ms var(--ease-out);
+}
+
+[data-photo-modal-open]:active {
+    transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    [data-photo-modal],
+    [data-photo-modal][open],
+    [data-photo-modal-open]:active {
+        transform: none;
+    }
+
+    [data-photo-modal],
+    [data-photo-modal]::backdrop {
+        transition-duration: 125ms;
+    }
+
+    @starting-style {
+        [data-photo-modal][open] {
+            transform: none;
+        }
+    }
+}
+
 [x-cloak] {
     display: none !important;
+}
+
+[data-item-order-modal]::backdrop,
+[data-patient-import-modal]::backdrop {
+    background: rgb(15 23 42 / 60%);
+    opacity: 1;
+    transition: opacity 220ms var(--ease-out);
+}
+
+[data-item-order-modal][data-closing]::backdrop,
+[data-patient-import-modal][data-closing]::backdrop {
+    opacity: 0;
+    transition-duration: 200ms;
+}
+
+@starting-style {
+    [data-item-order-modal][open]::backdrop,
+    [data-patient-import-modal][open]::backdrop {
+        opacity: 0;
+    }
+}
+
+[data-item-order-board] [data-dragging] {
+    opacity: 0.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    [data-item-order-modal]::backdrop,
+    [data-item-order-modal][data-closing]::backdrop,
+    [data-patient-import-modal]::backdrop,
+    [data-patient-import-modal][data-closing]::backdrop {
+        transition-duration: 125ms;
+    }
+}
+
+.exam-completion {
+    appearance: none;
+    background: #e2e8f0;
+    color: #047857;
+}
+
+.exam-completion::-webkit-progress-bar {
+    background: #e2e8f0;
+    border-radius: 9999px;
+}
+
+.exam-completion::-webkit-progress-value {
+    background: #047857;
+    border-radius: 9999px;
+}
+
+.exam-completion::-moz-progress-bar {
+    background: #047857;
+    border-radius: 9999px;
+}
+
+[data-patient-photo] button,
+[data-photo-drop] {
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+[data-patient-photo] button:active:not(:disabled) {
+    opacity: 0.85;
+}
+
+@media (pointer: coarse) {
+    [data-photo-file] {
+        font-size: 16px;
+    }
 }

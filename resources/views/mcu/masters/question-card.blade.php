@@ -1,0 +1,23 @@
+<section data-question-card @if($primary) data-primary-question @endif class="min-w-0 rounded-2xl border border-slate-200 border-l-4 border-l-blue-700 bg-white p-6 shadow-sm focus-within:border-l-[#00008B] sm:p-8">
+    <div class="mb-5 flex items-center justify-between gap-3"><span data-question-number class="text-xs font-bold uppercase tracking-wider text-slate-400">Pertanyaan {{ $index + 1 }}</span><span aria-hidden="true" class="text-xl text-slate-300">⠿</span></div>
+    <div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_220px]">
+        <label class="grid min-w-0 gap-2 text-sm font-semibold">Pertanyaan<input data-question-field="label" name="questions[{{ $index }}][label]" required maxlength="255" value="{{ $question['label'] ?? '' }}" placeholder="Pertanyaan tanpa judul" class="min-h-12 min-w-0 border-0 border-b-2 border-slate-200 bg-slate-50 px-4 text-base font-semibold outline-none focus:border-blue-800"></label>
+        <label class="grid gap-2 text-sm font-semibold">Jenis jawaban<select data-question-field="input_type" name="questions[{{ $index }}][input_type]" class="min-h-12 rounded-xl border border-slate-300 bg-white px-3 font-normal">@foreach($types as $value => $label)<option value="{{ $value }}" @selected(($question['input_type'] ?? 'radio') === $value)>{{ $label }}</option>@endforeach</select></label>
+    </div>
+    <label class="mt-4 grid gap-2 text-sm text-slate-500">Deskripsi / petunjuk (opsional)<textarea data-question-field="help_text" name="questions[{{ $index }}][help_text]" rows="2" maxlength="2000" placeholder="Tambahkan petunjuk pengisian" class="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-blue-800">{{ $question['help_text'] ?? '' }}</textarea></label>
+    <fieldset data-radio-mapping class="mt-5 grid gap-4 rounded-xl border border-slate-200 p-4">
+        <legend class="px-2 text-sm font-semibold">Mapping hasil laporan</legend>
+        @foreach(['yes_report' => 'YA', 'no_report' => 'TIDAK'] as $field => $answer)
+            <label class="flex flex-wrap items-start gap-3"><span class="flex w-20 items-center gap-2 pt-3 text-sm font-semibold"><span aria-hidden="true" class="h-4 w-4 rounded-full border-2 border-slate-300"></span>{{ $answer }}</span><span class="grid min-w-0 flex-1 gap-2 text-xs text-slate-500">Teks laporan jika jawaban {{ $answer }}<textarea data-question-field="{{ $field }}" name="questions[{{ $index }}][{{ $field }}]" rows="2" maxlength="2000" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-800">{{ $question[$field] ?? '' }}</textarea></span></label>
+        @endforeach
+        <p class="text-xs text-slate-500">Kedua hasil diatur sendiri. Jawaban kosong tidak dianggap TIDAK atau Normal.</p>
+    </fieldset>
+    <div data-answer-hint hidden class="mt-5 border-b border-dashed border-slate-300 pb-3 text-sm text-slate-400">Jawaban petugas</div>
+    <div class="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-4">
+        <div class="flex gap-3"><button type="button" data-question-duplicate class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">Duplikasi</button><button type="button" data-question-remove @if($primary) hidden @endif class="rounded-lg px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50">Hapus kartu</button></div>
+        <div class="flex flex-wrap items-center gap-5">
+            <label class="flex items-center gap-2 text-sm text-slate-500">Status<select data-question-field="is_active" name="questions[{{ $index }}][is_active]" class="rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm"><option value="1" @selected($question['is_active'] ?? true)>Aktif</option><option value="0" @selected(!($question['is_active'] ?? true))>Nonaktif</option></select></label>
+            <label class="flex cursor-pointer items-center gap-3 text-sm font-semibold"><input type="hidden" name="questions[{{ $index }}][is_required]" value="0"><input data-question-field="is_required" type="checkbox" name="questions[{{ $index }}][is_required]" value="1" @checked($question['is_required'] ?? true) class="peer sr-only"><span aria-hidden="true" class="relative h-6 w-11 rounded-full bg-slate-200 peer-checked:bg-blue-800 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-blue-800 after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white peer-checked:after:translate-x-5"></span>Wajib diisi</label>
+        </div>
+    </div>
+</section>
