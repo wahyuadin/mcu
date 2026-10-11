@@ -5,6 +5,8 @@ import './package-selection';
 import './master-item';
 import './item-order';
 import './patient-import';
+import './master-bulk-delete';
+import './laboratory-results';
 
 const examForm = document.querySelector('[data-exam-form]');
 

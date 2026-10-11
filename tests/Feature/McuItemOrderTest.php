@@ -23,7 +23,7 @@ class McuItemOrderTest extends TestCase
         $schema = [['id' => $category->id, 'name' => $category->name, 'order' => 0, 'items' => [$first->definition(), $second->definition()]]];
         $package = Paket::factory()->master()->create(['dynamic_schema' => $schema]);
         $url = route('mcu-item-order.show', $category);
-        $response = $this->getJson($url)->assertOk()->assertJsonPath('items.0.id', $first->id)->assertJsonPath('items.2.is_active', false);
+        $response = $this->getJson($url)->assertOk()->assertHeader('Cache-Control', 'no-store, private')->assertJsonPath('items.0.id', $first->id)->assertJsonPath('items.2.is_active', false);
         $this->putJson($url, ['version' => $response->json('version'), 'items' => [$second->id, $inactive->id, $first->id]])->assertOk()->assertJsonPath('message', 'Urutan item berhasil disimpan. Paket dan hasil pemeriksaan lama tidak berubah.');
         $this->assertSame(0, $second->fresh()->sort_order);
         $this->assertSame(1, $inactive->fresh()->sort_order);

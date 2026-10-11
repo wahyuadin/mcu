@@ -2,6 +2,10 @@ export function configureQuestionCard(card) {
     const type = card.querySelector('[data-question-field="input_type"]');
     const mapping = card.querySelector('[data-radio-mapping]');
     const hint = card.querySelector('[data-answer-hint]');
+    const laboratory = card.querySelector('[data-laboratory-mapping]');
+    const defaultResult = laboratory?.querySelector('[data-question-field="lab_default_result"]');
+    const rule = laboratory?.querySelector('[data-question-field="lab_rule"]');
+    const reference = laboratory?.querySelector('[data-question-field="lab_reference"]');
     const update = () => {
         const radio = type.value === 'radio';
         mapping.hidden = !radio;
@@ -9,8 +13,40 @@ export function configureQuestionCard(card) {
         mapping.querySelectorAll('textarea').forEach((field) => { field.required = radio; });
         hint.hidden = radio;
         hint.textContent = type.value === 'number' ? 'Jawaban berupa angka' : 'Jawaban berupa teks';
+        if (laboratory) {
+            const active = ['text', 'number'].includes(type.value);
+            const configured = active && (reference.value.trim() !== '' || !!defaultResult?.value.trim());
+            laboratory.hidden = !active;
+            laboratory.disabled = !active;
+            reference.required = active && !!defaultResult?.value.trim();
+            hint.hidden = radio || active;
+            const numeric = type.value === 'number';
+            if (defaultResult) {
+                defaultResult.type = numeric ? 'number' : 'text';
+                defaultResult.step = 'any';
+                if (numeric) {
+                    defaultResult.min = '-999999999';
+                    defaultResult.max = '999999999';
+                } else {
+                    defaultResult.removeAttribute('min');
+                    defaultResult.removeAttribute('max');
+                }
+            }
+            if (!numeric) rule.value = 'text';
+            else if (rule.value === 'text') rule.value = 'range';
+            [...rule.options].forEach((option) => { option.disabled = (option.value === 'text') === numeric; });
+            for (const [name, needed] of Object.entries({ lab_min: numeric && ['range', 'gt', 'gte'].includes(rule.value), lab_max: numeric && ['range', 'lt', 'lte'].includes(rule.value), lab_normal_values: !numeric })) {
+                const field = laboratory.querySelector(`[data-question-field="${name}"]`);
+                field.closest('label').hidden = !needed;
+                field.disabled = !needed;
+                field.required = configured && needed;
+            }
+        }
     };
     type.addEventListener('change', update);
+    rule?.addEventListener('change', update);
+    reference?.addEventListener('input', update);
+    defaultResult?.addEventListener('input', update);
     update();
 }
 
@@ -37,6 +73,16 @@ export function setupFormBuilder(form, root = document) {
     const toolbar = form.querySelector('[data-builder-toolbar]');
     const status = form.querySelector('[data-builder-status]');
     const cards = () => [...container.querySelectorAll('[data-question-card]')];
+    const subcategory = form.querySelector('[data-item-subcategory]');
+    const category = form.querySelector('[name="mcu_category_id"]');
+    if (subcategory && category) {
+        const filterSubcategories = () => {
+            [...subcategory.options].forEach((option) => { option.hidden = !!option.value && option.dataset.category !== category.value; option.disabled = option.hidden; });
+            if (subcategory.selectedOptions[0]?.disabled) subcategory.value = '';
+        };
+        category.addEventListener('change', filterSubcategories);
+        filterSubcategories();
+    }
     const renumber = () => cards().forEach(renameQuestion);
     cards().forEach(configureQuestionCard);
 
@@ -107,6 +153,13 @@ export function setupFormBuilder(form, root = document) {
                 input.placeholder = values.input_type === 'number' ? 'Jawaban berupa angka' : 'Jawaban berupa teks';
                 input.className = 'rounded-xl border border-slate-200 px-4 py-3 text-sm';
                 section.append(input);
+                if (['text', 'number'].includes(values.input_type) && values.lab_reference?.trim()) {
+                    input.value = values.lab_default_result || '';
+                    const reference = root.createElement('p');
+                    reference.className = 'whitespace-pre-line text-sm text-slate-500';
+                    reference.textContent = `Hasil · Unit: ${values.lab_unit || '—'} · Nilai normal: ${values.lab_reference || '—'}\nKeterangan normal: ${values.lab_normal_report || '(kosong)'}\nKeterangan tidak normal: ${values.lab_abnormal_report || '(kosong)'}`;
+                    section.append(reference);
+                }
             }
             preview.append(section);
         });

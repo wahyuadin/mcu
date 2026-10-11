@@ -37,17 +37,26 @@
         <section class="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6">
             <div class="flex flex-wrap items-center justify-between gap-3"><h3 class="text-lg font-bold">Review kelengkapan</h3><a target="_blank" rel="noopener" href="{{ route('pemeriksaan.report', [$kunjungan, $peserta]) }}" class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold">Pratinjau / cetak laporan ↗</a></div>
             @foreach($progress as $key => $section)
+                @continue(!$section['included'])
                 <div class="rounded-xl border border-slate-200 p-4">
                     <div class="flex items-center justify-between gap-3"><strong>{{ $section['label'] }}</strong><a href="{{ route('pemeriksaan.edit', [$kunjungan, $peserta, 'tab' => $key]) }}" class="text-sm {{ $section['status'] === 'Selesai' ? 'text-emerald-700' : 'text-amber-700' }}">{{ $section['status'] }} →</a></div>
                     @if($section['missing'])<p class="mt-2 text-sm text-slate-500">Belum lengkap: {{ implode(', ', $section['missing']) }}</p>@endif
                 </div>
             @endforeach
             <h3 class="font-bold">Temuan abnormal dan pengecualian</h3>
+            @foreach($exam->dynamicGroupsForSection($peserta, 'laboratorium') as $group)
+                @foreach($group['items'] as $item)
+                    @php($evaluation = $exam->laboratoryEvaluation($item))
+                    @if(in_array($evaluation['status'], ['Tidak normal', 'Tidak dapat dibandingkan'], true))<p class="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{{ $item['label'] }}: {{ $exam->dynamicReportValue($item) }} {{ $item['lab_config']['unit'] }} — {{ $evaluation['status'] }}{{ $evaluation['remark'] !== '' ? ' · '.$evaluation['remark'] : '' }}</p>@endif
+                @endforeach
+            @endforeach
             @forelse($exam->laboratorium ?? [] as $key => $row)
                 @if($exam->includes($peserta, $key) && (($row['skipped'] ?? false) || in_array($row['flag'] ?? null, ['Tinggi', 'Rendah', 'Tidak Normal'], true)))
                     <p class="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{{ collect($laboratoryGroups)->collapse()[$key]['label'] ?? $key }}: {{ ($row['skipped'] ?? false) ? 'Tidak dilakukan — '.($row['reason'] ?? '') : ($row['result'] ?? '').' '.($row['unit'] ?? '').' — '.($row['flag'] ?? '') }}</p>
                 @endif
-            @empty<p class="text-sm text-slate-500">Belum ada hasil laboratorium.</p>@endforelse
+            @empty
+                @if($progress['laboratorium']['included'])<p class="text-sm text-slate-500">Belum ada hasil laboratorium.</p>@endif
+            @endforelse
             @foreach($exam->penunjang ?? [] as $key => $row)
                 @if($exam->includes($peserta, $key))<p class="text-sm"><strong>{{ $supportingItems[$key]['label'] ?? $key }}:</strong> {{ ($row['skipped'] ?? false) ? 'Tidak dilakukan — '.($row['reason'] ?? '') : ($row['kesimpulan'] ?? 'Belum diisi') }}</p>@endif
             @endforeach

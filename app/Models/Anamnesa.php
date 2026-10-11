@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\LaboratoryResult;
 use App\McuCatalog;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -111,6 +112,54 @@ class Anamnesa extends Model implements Auditable
         return $this->dynamic_schema ?? ($this->exists ? [] : ($participant->paket->dynamic_schema ?? []));
     }
 
+    /** @return array<string, array<string, mixed>> */
+    public function categoryGroups(Karyawan $participant): array
+    {
+        return collect($this->dynamicGroups($participant))->filter(fn (array $group): bool => $group['items'] !== [])
+            ->sortBy('order')->keyBy(fn (array $group): string => 'kategori-'.$group['id'])->all();
+    }
+
+    /** @return array<string, array{label: string, status: string, missing: list<string>, included: bool}> */
+    public function categoryProgress(Karyawan $participant): array
+    {
+        $sections = [];
+        foreach ($this->categoryGroups($participant) as $key => $group) {
+            $missing = [];
+            $legacyStates = [];
+            foreach ($group['items'] as $item) {
+                if ($item['required'] && blank(($this->dynamic_answers ?? [])[$item['id']] ?? null)) {
+                    $missing[] = $group['name'].' — '.$item['label'];
+                } elseif ($item['type'] === 'laboratory' && $this->laboratoryEvaluation($item)['status'] === 'Tidak dapat dibandingkan') {
+                    $missing[] = $group['name'].' — '.$item['label'].' (hasil tidak dapat dibandingkan)';
+                }
+                $legacyStates[] = ($this->section_status ?? [])[$item['type'] === 'laboratory' ? 'laboratorium' : 'dinamis'] ?? null;
+            }
+            $state = ($this->section_status ?? [])[$key] ?? null;
+            if (! array_key_exists($key, $this->section_status ?? [])) {
+                if (count(array_filter($legacyStates, fn (?string $state): bool => $state === 'selesai')) === count($legacyStates)) {
+                    $state = 'selesai';
+                } elseif (array_filter($legacyStates) !== []) {
+                    $state = 'draft';
+                }
+            }
+            $sections[$key] = ['label' => $group['name'], 'included' => true, 'missing' => $missing,
+                'status' => $state === 'selesai' && $missing === [] ? 'Selesai' : ($state !== null ? 'Draft' : 'Belum diisi')];
+        }
+
+        return $sections;
+    }
+
+    /** @return array<string, array{label: string, status: string, missing: list<string>, included: bool}> */
+    public function workflowProgress(Karyawan $participant): array
+    {
+        $sections = $this->progress($participant, false);
+        unset($sections['dinamis']);
+        $conclusion = $sections['kesimpulan'];
+        unset($sections['kesimpulan']);
+
+        return $sections + $this->categoryProgress($participant) + ['kesimpulan' => $conclusion];
+    }
+
     /** @param array<string, mixed> $item */
     public function dynamicReportValue(array $item): string
     {
@@ -128,6 +177,28 @@ class Anamnesa extends Model implements Auditable
         }
 
         return (string) $answer;
+    }
+
+    /** @param array<string, mixed> $item
+     * @return array{status: string, remark: string}
+     */
+    public function laboratoryEvaluation(array $item): array
+    {
+        return LaboratoryResult::evaluate($item['lab_config'] ?? [], ($this->dynamic_answers ?? [])[$item['id']] ?? null);
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function dynamicGroupsForSection(Karyawan $participant, string $section): array
+    {
+        $groups = [];
+        foreach ($this->dynamicGroups($participant) as $group) {
+            $group['items'] = array_values(array_filter($group['items'], fn (array $item): bool => ($item['type'] === 'laboratory') === ($section === 'laboratorium')));
+            if ($group['items'] !== []) {
+                $groups[] = $group;
+            }
+        }
+
+        return $groups;
     }
 
     /** @return array{answer: ?string, note: ?string} */
@@ -151,7 +222,7 @@ class Anamnesa extends Model implements Auditable
     }
 
     /** @return array<string, array{label: string, status: string, missing: list<string>, included: bool}> */
-    public function progress(Karyawan $participant): array
+    public function progress(Karyawan $participant, bool $includeDynamic = true): array
     {
         $sections = [];
         foreach (['anamnesa' => 'Anamnesa', 'fisik' => 'Pemeriksaan fisik', 'laboratorium' => 'Laboratorium', 'penunjang' => 'Penunjang', 'dinamis' => 'Pemeriksaan sesuai mapping paket', 'kesimpulan' => 'Kesimpulan'] as $key => $label) {
@@ -200,11 +271,14 @@ class Anamnesa extends Model implements Auditable
             $sections['penunjang']['included'] = true;
             $sections['penunjang']['missing'] = [...$sections['penunjang']['missing'], ...$item['missing']];
         }
-        foreach ($this->dynamicGroups($participant) as $group) {
-            $sections['dinamis']['included'] = true;
+        foreach ($includeDynamic ? $this->dynamicGroups($participant) : [] as $group) {
             foreach ($group['items'] as $item) {
+                $section = $item['type'] === 'laboratory' ? 'laboratorium' : 'dinamis';
+                $sections[$section]['included'] = true;
                 if ($item['required'] && blank(($this->dynamic_answers ?? [])[$item['id']] ?? null)) {
-                    $sections['dinamis']['missing'][] = $group['name'].' — '.$item['label'];
+                    $sections[$section]['missing'][] = $group['name'].' — '.$item['label'];
+                } elseif ($item['type'] === 'laboratory' && $this->laboratoryEvaluation($item)['status'] === 'Tidak dapat dibandingkan') {
+                    $sections[$section]['missing'][] = $group['name'].' — '.$item['label'].' (hasil tidak dapat dibandingkan)';
                 }
             }
         }
@@ -256,8 +330,8 @@ class Anamnesa extends Model implements Auditable
     public function examinationCompletion(Karyawan $participant): array
     {
         $statuses = [$this->identityProgress($participant)['status']];
-        foreach ($this->progress($participant) as $key => $section) {
-            if (in_array($key, ['fisik', 'anamnesa', 'laboratorium', 'dinamis'], true) && $section['included']) {
+        foreach ($this->workflowProgress($participant) as $key => $section) {
+            if ((in_array($key, ['fisik', 'anamnesa', 'laboratorium'], true) || str_starts_with($key, 'kategori-')) && $section['included']) {
                 $statuses[] = $section['status'];
             }
         }
@@ -295,7 +369,7 @@ class Anamnesa extends Model implements Auditable
                 $errors[] = $label.' belum diisi.';
             }
         }
-        foreach ($this->progress($participant) as $section) {
+        foreach ($this->workflowProgress($participant) as $section) {
             if ($section['included'] && $section['status'] !== 'Selesai') {
                 $errors[] = $section['label'].' belum selesai'.($section['missing'] ? ': '.implode(', ', $section['missing']) : '. Tandai bagian selesai setelah diperiksa.');
             }

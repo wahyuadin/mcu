@@ -7,7 +7,7 @@ export function moveOrderItem(items, from, to) {
 
 export function setupItemOrderModal(dialog, root = document) {
     const category = dialog.querySelector('[data-item-order-category]');
-    const noun = category.hidden ? 'kategori' : 'item';
+    const noun = category.dataset?.orderNoun ?? (category.hidden ? 'kategori' : 'item');
     const board = dialog.querySelector('[data-item-order-board]');
     const status = dialog.querySelector('[data-item-order-status]');
     const save = dialog.querySelector('[data-item-order-save]');
@@ -88,19 +88,19 @@ export function setupItemOrderModal(dialog, root = document) {
         url = category.selectedOptions[0]?.dataset.url ?? null;
         render();
         if (!url) {
-            status.textContent = 'Pilih kategori untuk menampilkan kartu item.';
+            status.textContent = `Pilih kategori untuk menampilkan kartu ${noun}.`;
             return;
         }
         controller = new AbortController();
-        status.textContent = noun === 'kategori' ? 'Memuat seluruh kategori…' : 'Memuat seluruh item kategori…';
+        status.textContent = noun === 'kategori' ? 'Memuat seluruh kategori…' : `Memuat seluruh ${noun} kategori…`;
         try {
-            const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal });
+            const response = await fetch(url, { headers: { Accept: 'application/json' }, cache: 'no-store', signal: controller.signal });
             if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw new Error(`Daftar ${noun} tidak dapat dimuat. Periksa koneksi dan sesi login.`);
             const data = await response.json();
             if (current !== requestId || !dialog.open || closing) return;
             items = data.items;
             version = data.version;
-            status.textContent = items.length ? `${data.category} · ${items.length} ${noun}. Urutan dibaca dari atas ke bawah.` : (noun === 'kategori' ? 'Belum ada kategori MCU.' : 'Belum ada item dalam kategori ini.');
+            status.textContent = items.length ? `${data.category} · ${items.length} ${noun}. Urutan dibaca dari atas ke bawah.` : (noun === 'kategori' ? 'Belum ada kategori MCU.' : `Belum ada ${noun} dalam kategori ini.`);
             render();
         } catch (error) {
             if (current === requestId && error.name !== 'AbortError') status.textContent = error.message;

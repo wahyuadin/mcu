@@ -26,7 +26,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PemeriksaanController extends Controller
 {
-    public function edit(Request $request, RencanaKunjungan $kunjungan, Karyawan $peserta): View
+    public function edit(Request $request, RencanaKunjungan $kunjungan, Karyawan $peserta): View|RedirectResponse
     {
         $this->assertParticipant($kunjungan, $peserta);
         $peserta->load('paket', 'anamnesa.dokter', 'pasien', 'perusahaan');
@@ -36,12 +36,19 @@ class PemeriksaanController extends Controller
             return view('mcu.pemeriksaan-foto', ['kunjungan' => $kunjungan, 'peserta' => $peserta, 'hasPhoto' => $peserta->hasStoredPhoto()]);
         }
         $selectedDoctors = array_filter([$exam->dokter_id, $exam->dokter_fisik_id, ...array_column($exam->penunjang ?? [], 'doctor_id')]);
-        $tabs = ['ringkasan' => 'Ringkasan', 'identitas' => 'Identitas MCU', 'anamnesa' => 'Anamnesis', 'fisik' => 'Fisik', 'laboratorium' => 'Laboratorium', 'penunjang' => 'Penunjang', 'kesimpulan' => 'Kesimpulan', 'review' => 'Review'];
-        if ($exam->dynamicGroups($peserta) !== []) {
-            $tabs = array_merge(array_slice($tabs, 0, 6, true), ['dinamis' => 'Form paket'], array_slice($tabs, 6, null, true));
+        $categoryGroups = $exam->categoryGroups($peserta);
+        if ($request->query('tab') === 'dinamis') {
+            return redirect()->route('pemeriksaan.edit', [$kunjungan, $peserta, 'tab' => array_key_first($categoryGroups) ?? 'ringkasan']);
         }
+        $progress = $exam->workflowProgress($peserta);
+        $tabs = ['ringkasan' => 'Ringkasan', 'identitas' => 'Identitas MCU', 'anamnesa' => 'Anamnesis', 'fisik' => 'Fisik', 'laboratorium' => 'Laboratorium', 'penunjang' => 'Penunjang', 'kesimpulan' => 'Kesimpulan', 'review' => 'Review'];
+        foreach (['laboratorium', 'penunjang'] as $section) {
+            if (! $progress[$section]['included']) {
+                unset($tabs[$section]);
+            }
+        }
+        $tabs = array_merge(array_slice($tabs, 0, -2, true), array_map(fn (array $group): string => $group['name'], $categoryGroups), array_slice($tabs, -2, null, true));
         $tab = $request->query('tab', 'ringkasan');
-        $progress = $exam->progress($peserta);
         $examinations = ['identitas' => [
             'label' => 'Identitas MCU', 'description' => 'Data pasien, foto, QR identitas & kartu checkpoint',
             'status' => $exam->identityProgress($peserta)['status'], 'tab' => 'identitas', 'anchor' => null, 'skipped' => false,
@@ -65,12 +72,13 @@ class PemeriksaanController extends Controller
             ];
         }
         $completion = $exam->examinationCompletion($peserta);
-        if ($progress['dinamis']['included']) {
-            $examinations['dinamis'] = ['label' => 'Form sesuai mapping paket', 'description' => count($exam->dynamicGroups($peserta)).' kategori pemeriksaan', 'status' => $progress['dinamis']['status'], 'tab' => 'dinamis', 'anchor' => null, 'skipped' => false];
+        foreach ($categoryGroups as $key => $group) {
+            $examinations[$key] = ['label' => $group['name'], 'description' => count($group['items']).' item pemeriksaan', 'status' => $progress[$key]['status'], 'tab' => $key, 'anchor' => null, 'skipped' => false];
         }
 
         return view('mcu.pemeriksaan', [
             'kunjungan' => $kunjungan, 'peserta' => $peserta, 'exam' => $exam, 'tabs' => $tabs,
+            'categoryGroups' => $categoryGroups,
             'tab' => is_string($tab) && array_key_exists($tab, $tabs) ? $tab : 'ringkasan',
             'progress' => $progress, 'finalizationErrors' => $exam->finalizationErrors($peserta),
             'examinations' => $examinations, 'completedExaminations' => $completion['completed'],
@@ -110,7 +118,7 @@ class PemeriksaanController extends Controller
         $identityUrl = route('pemeriksaan.edit', [$kunjungan, $peserta, 'tab' => 'identitas']);
         $scanUrl = route('pemeriksaan.scan', [$kunjungan, $peserta]);
         $qr = new QrCode(data: $scanUrl, errorCorrectionLevel: ErrorCorrectionLevel::Medium, size: 320, margin: 24);
-        $progress = $exam->progress($peserta);
+        $progress = $exam->workflowProgress($peserta);
         $items = [];
         foreach (['anamnesa' => 'Anamnesa', 'fisik' => 'Fisik', 'laboratorium' => 'Laboratorium'] as $key => $label) {
             if ($progress[$key]['included']) {
@@ -130,8 +138,9 @@ class PemeriksaanController extends Controller
     public function update(Request $request, RencanaKunjungan $kunjungan, Karyawan $peserta): RedirectResponse
     {
         $this->assertParticipant($kunjungan, $peserta);
+        $exam = $peserta->anamnesa ?? new Anamnesa;
         $request->validate([
-            'section' => ['sometimes', Rule::in(['identitas', 'anamnesa', 'fisik', 'laboratorium', 'penunjang', 'dinamis', 'kesimpulan'])],
+            'section' => ['sometimes', Rule::in(['identitas', 'anamnesa', 'fisik', 'laboratorium', 'penunjang', 'dinamis', 'kesimpulan', ...array_keys($exam->categoryGroups($peserta))])],
             'status' => ['required', Rule::in(['draft', 'selesai', 'final'])],
             'lock_version' => [Rule::requiredIf($request->filled('section')), 'integer', 'min:0'],
         ]);
@@ -166,8 +175,8 @@ class PemeriksaanController extends Controller
                     'status_kelaikan' => ['nullable', Rule::in(['Fit to Work', 'Fit with Note', 'Temporarily Unfit', 'Unfit'])],
                     'dokter_id' => ['nullable', $this->doctorRule($exam->dokter_id)],
                 ]));
-            } elseif ($section === 'dinamis') {
-                $this->saveDynamic($request, $peserta, $exam);
+            } elseif ($section === 'dinamis' || ($section !== null && str_starts_with($section, 'kategori-'))) {
+                $this->saveDynamic($request, $peserta, $exam, $section);
             } else {
                 $this->saveLegacy($request, $peserta, $exam);
             }
@@ -176,7 +185,7 @@ class PemeriksaanController extends Controller
                 $states[$section] = $request->input('status') === 'selesai' ? 'selesai' : 'draft';
                 $exam->section_status = $states;
                 if ($request->input('status') === 'selesai') {
-                    $missing = $exam->progress($peserta)[$section]['missing'];
+                    $missing = (str_starts_with($section, 'kategori-') ? $exam->categoryProgress($peserta) : $exam->progress($peserta))[$section]['missing'];
                     if ($missing !== []) {
                         throw ValidationException::withMessages(['kelengkapan' => 'Bagian belum lengkap: '.implode(', ', $missing)]);
                     }
@@ -195,7 +204,7 @@ class PemeriksaanController extends Controller
             $peserta->update(['status_pemeriksaan' => $exam->status === 'final' ? 'selesai' : ($exam->finalizationErrors($peserta) === [] ? 'siap_finalisasi' : 'proses')]);
         });
 
-        return redirect()->route('pemeriksaan.edit', [$kunjungan, $peserta, 'tab' => $section ?? 'review'])->with('success', 'Hasil pemeriksaan tersimpan.');
+        return redirect()->route('pemeriksaan.edit', [$kunjungan, $peserta, 'tab' => $section === 'dinamis' ? 'review' : ($section ?? 'review')])->with('success', 'Hasil pemeriksaan tersimpan.');
     }
 
     public function finalize(Request $request, RencanaKunjungan $kunjungan, Karyawan $peserta): RedirectResponse
@@ -274,14 +283,24 @@ class PemeriksaanController extends Controller
         $exam->anamnesa_data = array_replace($exam->anamnesa_data ?? [], $data['anamnesa'] ?? []);
     }
 
-    private function saveDynamic(Request $request, Karyawan $participant, Anamnesa $exam): void
+    private function saveDynamic(Request $request, Karyawan $participant, Anamnesa $exam, string $section = 'dinamis'): void
     {
-        $definitions = collect($exam->dynamicGroups($participant))->pluck('items')->flatten(1)->filter(fn (array $item): bool => $item['type'] !== 'label')->keyBy('id');
+        if (str_starts_with($section, 'kategori-')) {
+            $groups = $exam->categoryGroups($participant);
+            if (! isset($groups[$section])) {
+                throw ValidationException::withMessages(['section' => 'Kategori ini tidak termasuk snapshot paket pasien. Muat ulang halaman pemeriksaan.']);
+            }
+            $groups = [$groups[$section]];
+        } else {
+            $groups = $exam->dynamicGroupsForSection($participant, $section);
+        }
+        $definitions = collect($groups)->pluck('items')->flatten(1)->filter(fn (array $item): bool => $item['type'] !== 'label')->keyBy('id');
         $rules = ['dynamic_answers' => $definitions->isEmpty() ? ['sometimes', 'array', 'size:0'] : ['sometimes', 'array:'.implode(',', $definitions->keys()->all())]];
         foreach ($definitions as $id => $item) {
             $rules['dynamic_answers.'.$id] = match ($item['type']) {
                 'radio' => ['nullable', Rule::in(['YA', 'TIDAK'])],
                 'number' => ['nullable', 'numeric', 'between:-999999999,999999999'],
+                'laboratory' => ($item['lab_config']['result_type'] ?? 'text') === 'number' ? ['nullable', 'numeric', 'between:-999999999,999999999'] : ['nullable', 'string', 'max:2000'],
                 default => ['nullable', 'string', 'max:2000'],
             };
         }
@@ -317,6 +336,7 @@ class PemeriksaanController extends Controller
 
     private function saveLaboratory(Request $request, Karyawan $participant, Anamnesa $exam): void
     {
+        $this->saveDynamic($request, $participant, $exam, 'laboratorium');
         $rules = [];
         foreach (McuCatalog::laboratory() as $items) {
             foreach ($items as $key => $item) {

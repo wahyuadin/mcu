@@ -12,7 +12,10 @@
 
     @foreach($paket->dynamic_schema ?? [] as $group)
         <section class="grid gap-4 rounded-2xl border border-slate-200 bg-white p-6"><h3 class="font-bold">{{ $group['name'] }}</h3>
-            @foreach($group['items'] as $item)<div class="rounded-xl bg-slate-50 p-4"><strong class="text-sm">{{ $item['label'] }}</strong><p class="mt-1 text-xs text-slate-500">{{ \App\Models\McuItem::inputTypes()[$item['type']] ?? $item['type'] }} · {{ $item['required'] ? 'Wajib' : 'Opsional' }}</p>@if($item['type'] === 'radio')<p class="mt-2 break-words text-sm">YA → {{ $item['yes_report'] }}<br>TIDAK → {{ $item['no_report'] }}</p>@endif</div>@endforeach
+            @foreach(\App\LaboratoryResult::sections($group['items']) as $subsection)
+                @if($subsection['name'])<h4 class="font-semibold">{{ $subsection['name'] }}</h4>@endif
+                @foreach($subsection['items'] as $item)<div class="rounded-xl bg-slate-50 p-4"><strong class="text-sm">{{ $item['label'] }}</strong><p class="mt-1 text-xs text-slate-500">{{ \App\Models\McuItem::inputTypes()[$item['lab_config']['result_type'] ?? $item['type']] ?? $item['type'] }} · {{ $item['required'] ? 'Wajib' : 'Opsional' }}</p>@if($item['type'] === 'radio')<p class="mt-2 break-words text-sm">YA → {{ $item['yes_report'] }}<br>TIDAK → {{ $item['no_report'] }}</p>@elseif($item['type'] === 'laboratory')<dl class="mt-3 grid gap-2 text-sm"><div><dt class="font-semibold">Unit / Nilai normal</dt><dd>{{ $item['lab_config']['unit'] }} · {{ $item['lab_config']['reference'] }}</dd></div><div><dt class="font-semibold">Hasil default</dt><dd>{{ $item['lab_config']['default_result'] ?? '—' }}</dd></div><div><dt class="font-semibold">Normal → keterangan</dt><dd class="whitespace-pre-line">{{ $item['lab_config']['normal_report'] ?: '—' }}</dd></div><div><dt class="font-semibold">Tidak normal → keterangan</dt><dd class="whitespace-pre-line">{{ $item['lab_config']['abnormal_report'] ?: '—' }}</dd></div></dl>@endif</div>@endforeach
+            @endforeach
         </section>
     @endforeach
     <div class="grid gap-6 lg:grid-cols-[1fr_340px]">

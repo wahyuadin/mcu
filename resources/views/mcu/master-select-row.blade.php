@@ -1,0 +1,1 @@
+<td class="px-5 py-4 align-top"><label class="inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center"><input type="checkbox" data-bulk-delete-row form="master-bulk-delete" name="ids[]" value="{{ $selectionId }}" aria-label="Pilih {{ $selectionName }}" class="h-4 w-4 rounded border-slate-300 accent-[#00008B]"></label></td>

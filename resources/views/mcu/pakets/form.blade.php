@@ -28,35 +28,44 @@
                 @php
                     $selectedMasters = old('master_items', session()->hasOldInput() ? [] : collect($paket->dynamic_schema ?? [])->pluck('items')->flatten(1)->pluck('id')->all());
                 @endphp
+                @if($categories->pluck('items')->flatten(1)->isEmpty())
+                    <p class="rounded-xl bg-slate-50 p-4 text-sm text-slate-500 xl:col-span-2">Belum ada item master aktif. Tambahkan kategori dan item di master untuk memilih pemeriksaan lainnya. Anamnesa dan pengukuran/BMI bawaan tetap tersedia di bawah.</p>
+                @endif
                 @foreach($categories as $category)
                     @if($category->items->isNotEmpty())
                         <fieldset data-package-group class="min-w-0 rounded-2xl border border-slate-200 p-5">
                             <legend class="px-2 text-sm font-bold">{{ $category->name }}</legend>
                             <button type="button" data-package-toggle class="mb-3 text-xs font-semibold text-[#00008B]">Pilih / lepas semua dalam kelompok</button>
                             <div class="grid gap-3">
-                                @foreach($category->items as $item)
+                                @foreach($category->items->groupBy(fn ($item) => $item->mcu_subcategory_id ?? '')->sortBy(fn ($items) => $items->first()->subcategory?->sort_order ?? -1) as $groupedItems)
+                                    <fieldset data-package-group class="min-w-0 grid gap-2 rounded-xl border border-slate-100 p-3">
+                                        @if($groupedItems->first()->subcategory)<legend class="px-2 text-sm font-semibold">{{ $groupedItems->first()->subcategory->name }}</legend><button type="button" data-package-toggle class="justify-self-start text-xs font-semibold text-[#00008B]">Pilih / lepas semua subkategori</button>@endif
+                                @foreach($groupedItems as $item)
                                     <label class="flex cursor-pointer items-start gap-3 rounded-xl p-2 hover:bg-blue-50">
                                         <input type="checkbox" name="master_items[]" value="{{ $item->id }}" @checked(in_array($item->id, $selectedMasters, true) || (!session()->hasOldInput() && $item->input_type === 'existing' && $paket->isItemActive($item->legacy_key))) class="mt-1 h-4 w-4 shrink-0 accent-[#00008B]">
                                         <span class="min-w-0 text-sm"><strong class="block break-words font-semibold">{{ $item->label }}</strong><span class="mt-1 block text-xs text-slate-500">{{ $item->inputLabel() }}</span>
                                             @if($item->input_type === 'radio')<span class="mt-1 block break-words text-xs text-slate-500">YA → {{ $item->yes_report }} · TIDAK → {{ $item->no_report }}</span>@endif
+                                            @if($item->lab_config)<span class="mt-1 block break-words text-xs text-slate-500">Unit: {{ $item->lab_config['unit'] ?: '—' }} · Nilai normal: {{ $item->lab_config['reference'] }}</span>@endif
                                         </span>
                                     </label>
+                                @endforeach
+                                    </fieldset>
                                 @endforeach
                             </div>
                         </fieldset>
                     @endif
                 @endforeach
             </div>
-            <div class="border-t border-slate-100 px-6 py-4"><h4 class="font-bold">Anamnesa & pengukuran existing</h4><p class="mt-1 text-xs text-slate-500">Perhitungan BMI tetap otomatis menyertakan tinggi dan berat badan. Item lama yang belum tersedia di master tetap ditampilkan untuk kompatibilitas.</p></div>
+            <div class="border-t border-slate-100 px-6 py-4"><h4 class="font-bold">Anamnesa & pengukuran existing</h4><p class="mt-1 text-xs text-slate-500">Perhitungan BMI tetap otomatis menyertakan tinggi dan berat badan. Item lama hanya ditampilkan jika sudah dipilih dalam paket yang sedang diedit; tidak ditawarkan kembali pada paket baru.</p></div>
             <div class="grid gap-4 p-5 xl:grid-cols-2">
                 @foreach($catalog as $group => $items)
                     @php
-                        $items = array_filter($items, fn ($label, $key) => in_array($group, ['anamnesa_riwayat', 'antropometri_vital'], true) || !in_array($key, $legacyMasterKeys, true) || ($paket->isItemActive($key) && !$categories->pluck('items')->flatten(1)->contains(fn ($item) => $item->legacy_key === $key && $item->input_type === 'existing')), ARRAY_FILTER_USE_BOTH);
+                        $items = array_filter($items, fn ($label, $key) => in_array($group, ['anamnesa_riwayat', 'antropometri_vital'], true) || ($paket->exists && $paket->isItemActive($key) && !$categories->pluck('items')->flatten(1)->contains(fn ($item) => $item->legacy_key === $key && $item->input_type === 'existing')), ARRAY_FILTER_USE_BOTH);
                     @endphp
                     @if($items === []) @continue @endif
                     @php $selectedItems = old('items', array_keys(array_filter($paket->active_items ?? []))); @endphp
                     <fieldset data-package-group class="rounded-2xl border border-slate-200 p-5">
-                        <legend class="px-2 text-sm font-bold text-slate-800">{{ ucwords(str_replace('_', ' ', $group)) }}</legend>
+                        <legend class="px-2 text-sm font-bold text-slate-800">{{ ['anamnesa_riwayat' => 'Anamnesa Pasien', 'antropometri_vital' => 'Hasil Pemeriksaan Fisik'][$group] ?? ucwords(str_replace('_', ' ', $group)) }}</legend>
                         <button type="button" data-package-toggle class="mb-3 text-xs font-semibold text-[#00008B]">Pilih / lepas semua dalam kelompok</button>
                         <div class="grid gap-2.5">
                             @foreach($items as $key => $label)

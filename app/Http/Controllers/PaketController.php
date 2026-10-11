@@ -40,7 +40,6 @@ class PaketController extends Controller
             'paket' => new Paket,
             'catalog' => Paket::getDefaultItemCatalog(),
             'categories' => $this->categories(),
-            'legacyMasterKeys' => McuItem::whereNotNull('legacy_key')->pluck('legacy_key')->all(),
         ]);
     }
 
@@ -82,7 +81,6 @@ class PaketController extends Controller
             'paket' => $paket,
             'catalog' => Paket::getDefaultItemCatalog(),
             'categories' => $this->categories(),
-            'legacyMasterKeys' => McuItem::whereNotNull('legacy_key')->pluck('legacy_key')->all(),
         ]);
     }
 
@@ -116,6 +114,9 @@ class PaketController extends Controller
     private function validated(Request $request): array
     {
         $catalog = Arr::collapse(array_values(Paket::getDefaultItemCatalog()));
+        if ($request->routeIs('paket.store')) {
+            $catalog = Arr::collapse(array_values(Arr::only(Paket::getDefaultItemCatalog(), ['anamnesa_riwayat', 'antropometri_vital'])));
+        }
 
         $data = $request->validate([
             'rencana_kunjungan_id' => ['nullable', Rule::exists('rencana_kunjungans', 'id')->whereNull('deleted_at')],
@@ -128,9 +129,9 @@ class PaketController extends Controller
         ]);
         $data['items'] ??= [];
         $data['dynamic_schema'] = [];
-        $selected = McuItem::with('category')->whereIn('id', $data['master_items'] ?? [])->orderBy('sort_order')->orderBy('label')->get();
+        $selected = McuItem::with('category', 'subcategory')->whereIn('id', $data['master_items'] ?? [])->orderBy('sort_order')->orderBy('label')->get();
         foreach ($selected as $item) {
-            if (! $item->category->is_active) {
+            if (! $item->category->is_active || ($item->subcategory && (! $item->subcategory->is_active || $item->subcategory->mcu_category_id !== $item->mcu_category_id))) {
                 throw ValidationException::withMessages(['master_items' => 'Kategori item sudah nonaktif. Muat ulang daftar paket.']);
             }
             $categoryId = $item->mcu_category_id;
@@ -150,6 +151,6 @@ class PaketController extends Controller
 
     private function categories(): Collection
     {
-        return McuCategory::where('is_active', true)->with(['items' => fn ($query) => $query->where('is_active', true)->whereNot('input_type', 'label')])->orderBy('sort_order')->orderBy('name')->get();
+        return McuCategory::where('is_active', true)->with(['items' => fn ($query) => $query->with('subcategory')->where('is_active', true)->whereNot('input_type', 'label')->where(fn ($query) => $query->whereNull('mcu_subcategory_id')->orWhereHas('subcategory', fn ($query) => $query->where('is_active', true)))])->orderBy('sort_order')->orderBy('name')->get();
     }
 }

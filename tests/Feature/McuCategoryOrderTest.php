@@ -73,6 +73,22 @@ class McuCategoryOrderTest extends TestCase
         $this->putJson($url, [])->assertForbidden();
     }
 
+    public function test_order_endpoint_returns_empty_after_bulk_deletion_and_never_restores_deleted_categories(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+        $category = McuCategory::factory()->create(['name' => 'Kategori dihapus']);
+        $url = route('mcu-category-order.show');
+        $before = $this->getJson($url)->assertOk()->assertHeader('Cache-Control', 'no-store, private')->assertJsonCount(1, 'items');
+
+        $this->post(route('mcu-category.bulk-destroy'), ['ids' => [$category->id]])->assertRedirect(route('mcu-category.index'));
+
+        $after = $this->getJson($url)->assertOk()->assertHeader('Cache-Control', 'no-store, private')->assertJsonCount(0, 'items');
+        $this->assertNotSame($before->json('version'), $after->json('version'));
+        $this->get(route('mcu-category.create'))->assertOk()->assertSee('Atur urutan kategori');
+        $this->putJson(route('mcu-category-order.update'), ['version' => $before->json('version'), 'items' => [$category->id]])->assertUnprocessable()->assertJsonValidationErrors('version');
+        $this->assertDatabaseMissing('mcu_categories', ['id' => $category->id]);
+    }
+
     public function test_category_forms_use_cards_and_preserve_order_when_saving_other_changes(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));

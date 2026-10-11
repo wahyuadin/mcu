@@ -52,6 +52,9 @@ class McuCategoryController extends Controller
     {
         DB::transaction(function () use ($category): void {
             $category = McuCategory::whereKey($category->id)->lockForUpdate()->firstOrFail();
+            if ($category->subcategories()->exists()) {
+                throw ValidationException::withMessages(['category' => 'Kategori masih memiliki subkategori. Hapus atau pindahkan subkategori terlebih dahulu.']);
+            }
             if ($category->items()->exists()) {
                 throw ValidationException::withMessages(['category' => 'Kategori masih memiliki item. Hapus atau pindahkan item terlebih dahulu.']);
             }

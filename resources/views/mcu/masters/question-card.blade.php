@@ -12,6 +12,20 @@
         @endforeach
         <p class="text-xs text-slate-500">Kedua hasil diatur sendiri. Jawaban kosong tidak dianggap TIDAK atau Normal.</p>
     </fieldset>
+    <fieldset data-laboratory-mapping class="mt-5 grid gap-4 rounded-xl border border-blue-200 bg-blue-50/40 p-4">
+        <legend class="px-2 text-sm font-semibold">Mapping hasil laporan</legend>
+        <div class="grid gap-4 sm:grid-cols-2">
+            <label class="grid gap-2 text-sm font-semibold">Aturan normal<select data-question-field="lab_rule" name="questions[{{ $index }}][lab_rule]" class="min-h-12 rounded-xl border border-slate-300 bg-white px-3">@foreach(['range' => 'Rentang (minimum ≤ hasil ≤ maksimum)', 'lt' => 'Kurang dari (< maksimum)', 'lte' => 'Kurang dari atau sama (≤ maksimum)', 'gt' => 'Lebih dari (> minimum)', 'gte' => 'Lebih dari atau sama (≥ minimum)', 'text' => 'Cocok dengan hasil teks normal'] as $value => $label)<option value="{{ $value }}" @selected(($question['lab_rule'] ?? 'range') === $value)>{{ $label }}</option>@endforeach</select></label>
+            @foreach(['lab_min' => 'Minimum', 'lab_max' => 'Maksimum', 'lab_unit' => 'Unit (opsional)', 'lab_reference' => 'Nilai normal yang ditampilkan'] as $field => $label)
+                <label class="grid gap-2 text-sm font-semibold">{{ $label }}<input data-question-field="{{ $field }}" name="questions[{{ $index }}][{{ $field }}]" type="{{ in_array($field, ['lab_min', 'lab_max']) ? 'number' : 'text' }}" @if(in_array($field, ['lab_min', 'lab_max'])) step="any" @endif value="{{ $question[$field] ?? '' }}" class="min-h-12 min-w-0 rounded-xl border border-slate-300 bg-white px-3"></label>
+            @endforeach
+            <label class="grid gap-2 text-sm font-semibold">Hasil default (opsional)<input data-question-field="lab_default_result" name="questions[{{ $index }}][lab_default_result]" type="{{ ($question['input_type'] ?? 'text') === 'number' ? 'number' : 'text' }}" step="any" value="{{ $question['lab_default_result'] ?? '' }}" class="min-h-12 min-w-0 rounded-xl border border-slate-300 bg-white px-3"><span class="text-xs font-normal text-slate-500">Nilai awal untuk Hasil, bukan rentang rujukan. Gunakan satu angka untuk Isian angka. Pemeriksa wajib mencocokkan dengan hasil pemeriksaan sebelum menyimpan.</span></label>
+        </div>
+        @foreach(['lab_normal_values' => 'Hasil teks normal (satu per baris; tidak membedakan huruf besar/kecil)', 'lab_normal_report' => 'Keterangan jika normal (opsional)', 'lab_abnormal_report' => 'Keterangan jika tidak normal (opsional)'] as $field => $label)
+            <label class="grid gap-2 text-sm font-semibold">{{ $label }}<textarea data-question-field="{{ $field }}" name="questions[{{ $index }}][{{ $field }}]" rows="2" maxlength="2000" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2">{{ $question[$field] ?? '' }}</textarea></label>
+        @endforeach
+        <p class="text-xs text-slate-500">Pada Isian teks/angka, isi nilai normal untuk menggunakan format Hasil, Unit, Nilai Normal, dan Keterangan. Kosongkan nilai normal jika hanya membutuhkan isian biasa. Status dihitung dari aturan, bukan dari teks rujukan. Keterangan boleh kosong. Hasil kosong tidak dianggap normal.</p>
+    </fieldset>
     <div data-answer-hint hidden class="mt-5 border-b border-dashed border-slate-300 pb-3 text-sm text-slate-400">Jawaban petugas</div>
     <div class="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-4">
         <div class="flex gap-3"><button type="button" data-question-duplicate class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">Duplikasi</button><button type="button" data-question-remove @if($primary) hidden @endif class="rounded-lg px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50">Hapus kartu</button></div>

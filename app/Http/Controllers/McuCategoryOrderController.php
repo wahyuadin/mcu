@@ -18,7 +18,7 @@ class McuCategoryOrderController extends Controller
         return response()->json([
             'category' => 'Seluruh kategori MCU', 'version' => $this->version($categories),
             'items' => $categories->map(fn (McuCategory $category): array => ['id' => $category->id, 'label' => $category->name, 'type' => 'Kategori', 'is_active' => $category->is_active])->values(),
-        ]);
+        ])->header('Cache-Control', 'no-store, private');
     }
 
     public function update(Request $request): JsonResponse

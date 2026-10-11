@@ -15,11 +15,11 @@ class McuItem extends Model implements Auditable
     /** @use HasFactory<McuItemFactory> */
     use AuditableTrait, HasFactory, HasUuids;
 
-    protected $fillable = ['mcu_category_id', 'label', 'input_type', 'yes_report', 'no_report', 'help_text', 'is_required', 'is_active', 'sort_order'];
+    protected $fillable = ['mcu_category_id', 'mcu_subcategory_id', 'lab_config', 'label', 'input_type', 'yes_report', 'no_report', 'help_text', 'is_required', 'is_active', 'sort_order'];
 
     protected function casts(): array
     {
-        return ['is_required' => 'boolean', 'is_active' => 'boolean', 'sort_order' => 'integer'];
+        return ['lab_config' => 'array', 'is_required' => 'boolean', 'is_active' => 'boolean', 'sort_order' => 'integer'];
     }
 
     public function category(): BelongsTo
@@ -35,6 +35,10 @@ class McuItem extends Model implements Auditable
 
     public function editorType(): string
     {
+        if ($this->input_type === 'laboratory') {
+            return ($this->lab_config['result_type'] ?? 'text') === 'number' ? 'number' : 'text';
+        }
+
         return in_array($this->input_type, ['existing', 'label'], true) ? 'text' : $this->input_type;
     }
 
@@ -43,10 +47,24 @@ class McuItem extends Model implements Auditable
         return $this->input_type === 'label' ? 'Informasi (format lama)' : (self::inputTypes()[$this->editorType()] ?? 'Isian teks');
     }
 
-    /** @return array{id: string, label: string, type: string, required: bool, yes_report: ?string, no_report: ?string, help_text: ?string} */
+    public function subcategory(): BelongsTo
+    {
+        return $this->belongsTo(McuSubcategory::class, 'mcu_subcategory_id');
+    }
+
+    /** @return array<string, mixed> */
     public function definition(): array
     {
-        return ['id' => $this->id, 'label' => $this->label, 'type' => $this->input_type === 'label' ? 'label' : $this->editorType(), 'required' => $this->input_type !== 'label' && $this->is_required,
+        $definition = ['id' => $this->id, 'label' => $this->label, 'type' => $this->input_type === 'label' ? 'label' : $this->editorType(), 'required' => $this->input_type !== 'label' && $this->is_required,
             'yes_report' => $this->yes_report, 'no_report' => $this->no_report, 'help_text' => $this->help_text];
+        if ($this->mcu_subcategory_id && $this->subcategory) {
+            $definition['subcategory'] = ['id' => $this->subcategory->id, 'name' => $this->subcategory->name, 'order' => $this->subcategory->sort_order];
+        }
+        if ($this->input_type === 'laboratory' || (in_array($this->input_type, ['text', 'number'], true) && $this->lab_config !== null)) {
+            $definition['type'] = 'laboratory';
+            $definition['lab_config'] = $this->lab_config;
+        }
+
+        return $definition;
     }
 }

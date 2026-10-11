@@ -73,7 +73,7 @@ async function harness(run, { reduced = false, categoryOrder = false } = {}) {
     const open = async () => { trigger.events.click(); await tick(); };
     const down = (index) => board.events.click({ target: board.children[index].children[3].children[1] });
     try {
-        await run({ dialog, board, category, status, save, close, trigger, animations, calls, open, down, fail: () => { failure = true; } });
+        await run({ dialog, board, category, status, save, close, trigger, animations, calls, open, down, records, fail: () => { failure = true; } });
     } finally {
         Object.entries(originals).forEach(([key, value]) => {
             if (value === undefined) delete globalThis[key];
@@ -158,6 +158,24 @@ test('server validation errors remain in the modal without clearing unsaved card
         assert.equal(save.disabled, false);
     });
 });
+
+for (const categoryOrder of [true, false]) {
+    test(`${categoryOrder ? 'category' : 'item'} ordering reloads without cache after all records are deleted`, async () => {
+        await harness(async ({ board, close, open, records, calls, save, status }) => {
+            await open();
+            assert.equal(board.children.length, 3);
+            assert.equal(calls[0].options.cache, 'no-store');
+            await close.events.click();
+            records.splice(0);
+            await open();
+            assert.equal(calls.length, 2);
+            assert.equal(calls[1].options.cache, 'no-store');
+            assert.equal(board.children.length, 0);
+            assert.equal(save.disabled, true);
+            assert.match(status.textContent, /Belum ada/);
+        }, { categoryOrder });
+    });
+}
 
 test('Escape uses the same fade out and reduced motion keeps a gentle opacity-only fade', async () => {
     await harness(async ({ dialog, animations, open }) => {

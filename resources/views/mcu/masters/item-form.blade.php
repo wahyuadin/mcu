@@ -9,11 +9,19 @@
             <p class="text-xs font-bold uppercase tracking-wider text-blue-800">Pembuat form MCU</p><h2 class="mt-2 text-2xl font-bold">{{ $item->exists ? 'Ubah pertanyaan' : 'Susun pertanyaan pemeriksaan' }}</h2>
             <p class="mt-2 text-sm text-slate-500">Pilih kategori, susun pertanyaan, dan tentukan jenis jawaban seperti membuat Google Form.</p>
             <div class="mt-6">@include('mcu.field', ['field' => 'mcu_category_id', 'label' => 'Kategori (wajib)', 'type' => 'select', 'options' => $categories->pluck('name', 'id'), 'value' => $item->mcu_category_id])</div>
+            <label class="mt-4 grid gap-2 text-sm font-semibold">Subkategori (opsional)<select name="mcu_subcategory_id" data-item-subcategory class="min-h-12 rounded-xl border border-slate-300 bg-white px-3"><option value="">Langsung di bawah kategori</option>@foreach($subcategories as $subcategory)<option value="{{ $subcategory->id }}" data-category="{{ $subcategory->mcu_category_id }}" @selected(old('mcu_subcategory_id', $item->mcu_subcategory_id) === $subcategory->id)>{{ $subcategory->category->name }} — {{ $subcategory->name }}</option>@endforeach</select></label>
+            <a href="{{ route('mcu-subcategory.index') }}" class="mt-3 inline-block text-sm font-semibold text-[#00008B]">Kelola subkategori →</a>
             @if(in_array($item->input_type, ['existing', 'label'], true))<p class="mt-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-900">Item lama disesuaikan menjadi isian teks pada editor ini. Anda dapat memilih radio atau angka. Perubahan berlaku setelah disimpan; paket dan hasil lama tidak berubah.</p>@endif
         </section>
         <div data-builder-preview hidden class="grid gap-4" aria-label="Pratinjau form pemeriksaan"></div>
         <div data-builder-cards class="grid gap-5">
-            @php($questions = old('questions', [['label' => $item->label, 'input_type' => $item->editorType(), 'yes_report' => $item->yes_report, 'no_report' => $item->no_report, 'help_text' => $item->help_text, 'is_required' => $item->is_required ?? true, 'is_active' => $item->is_active ?? true]]))
+            @php
+                $labFields = [];
+                foreach ($item->lab_config ?? [] as $key => $value) {
+                    $labFields['lab_'.$key] = $key === 'normal_values' ? implode("\n", $value) : $value;
+                }
+                $questions = old('questions', [array_merge(['label' => $item->label, 'input_type' => $item->editorType(), 'yes_report' => $item->yes_report, 'no_report' => $item->no_report, 'help_text' => $item->help_text, 'is_required' => $item->is_required ?? true, 'is_active' => $item->is_active ?? true], $labFields)]);
+            @endphp
             @foreach($questions as $index => $question)
                 @include('mcu.masters.question-card', ['question' => $question, 'index' => $index, 'primary' => $item->exists && $index === 0])
             @endforeach

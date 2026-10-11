@@ -26,7 +26,8 @@ class DynamicMcuPackageTest extends TestCase
         $this->get(route('mcu-item.create', ['category' => $category->id]))->assertOk()->assertSee('Mapping hasil laporan');
         $this->post(route('mcu-item.store'), $this->itemPayload($category))->assertSessionHasNoErrors();
         $item = McuItem::firstOrFail();
-        $this->get(route('paket.create'))->assertOk()->assertSee('Riwayat sebelumnya')->assertSee('Hepatitis')->assertSee('TIDAK → Normal');
+        $this->get(route('paket.create'))->assertOk()->assertSee('Riwayat sebelumnya')->assertSee('Hepatitis')->assertSee('TIDAK → Normal')
+            ->assertSee('Anamnesa Pasien')->assertSee('Hasil Pemeriksaan Fisik')->assertDontSee('Anamnesa Riwayat')->assertDontSee('Antropometri Vital');
         $this->post(route('paket.store'), ['nama_paket' => 'Paket dinamis', 'master_items' => [$item->id]])->assertSessionHasNoErrors();
         $package = Paket::firstOrFail();
         $this->assertSame([], $package->active_items);
@@ -74,7 +75,7 @@ class DynamicMcuPackageTest extends TestCase
     public function test_unanswered_radio_is_not_normal_and_required_answers_block_completion(): void
     {
         [$participant, $item] = $this->dynamicParticipant();
-        $this->get(route('pemeriksaan.edit', [$participant->rencanaKunjungan, $participant, 'tab' => 'dinamis']))->assertOk()->assertSee('Hepatitis')->assertDontSee('checked', false);
+        $this->get(route('pemeriksaan.edit', [$participant->rencanaKunjungan, $participant, 'tab' => 'kategori-'.$item->mcu_category_id]))->assertOk()->assertSee('Hepatitis')->assertDontSee('checked', false);
         $this->get(route('pemeriksaan.report', [$participant->rencanaKunjungan, $participant]))->assertOk()->assertSee('Belum diisi')->assertDontSee('Ada riwayat Hepatitis');
         $this->put(route('pemeriksaan.update', [$participant->rencanaKunjungan, $participant]), ['section' => 'dinamis', 'status' => 'selesai', 'lock_version' => 0])->assertSessionHasErrors('kelengkapan');
         $this->assertDatabaseCount('anamnesas', 0);
@@ -207,6 +208,46 @@ class DynamicMcuPackageTest extends TestCase
         $participant->rencanaKunjungan->update(['is_closing' => true]);
         $this->put($url, $payload)->assertForbidden();
         $this->assertDatabaseCount('anamnesas', 0);
+    }
+
+    public function test_deleting_all_masters_does_not_restore_legacy_options_in_new_package_form(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+        $this->seed(McuFormMasterSeeder::class);
+        $skin = McuItem::where('legacy_key', 'kulit')->firstOrFail();
+        $schema = [['id' => $skin->category->id, 'name' => $skin->category->name, 'order' => 0, 'items' => [$skin->definition()]]];
+        $oldPackage = Paket::factory()->master()->create(['dynamic_schema' => $schema]);
+        foreach (McuItem::pluck('id')->chunk(30) as $ids) {
+            $this->post(route('mcu-item.bulk-destroy'), ['ids' => $ids->values()->all()])->assertRedirect(route('mcu-item.index'));
+        }
+        foreach (McuCategory::pluck('id')->chunk(30) as $ids) {
+            $this->post(route('mcu-category.bulk-destroy'), ['ids' => $ids->values()->all()])->assertRedirect(route('mcu-category.index'));
+        }
+
+        $this->assertDatabaseCount('mcu_items', 0);
+        $this->assertDatabaseCount('mcu_categories', 0);
+        $this->get(route('paket.create'))->assertOk()->assertSee('Belum ada item master aktif')
+            ->assertSee('value="bmi"', false)->assertSee('value="hipertensi"', false)
+            ->assertDontSee('value="kulit"', false)->assertDontSee('value="rontgen"', false)->assertDontSee('value="lab_kolesterol"', false)
+            ->assertDontSee('value="'.$skin->id.'"', false);
+        $this->post(route('paket.store'), ['nama_paket' => 'Katalog terhapus', 'items' => ['kulit']])->assertSessionHasErrors('items.0');
+        $this->post(route('paket.store'), ['nama_paket' => 'Master terhapus', 'master_items' => [$skin->id]])->assertSessionHasErrors('master_items.0');
+        $this->assertSame($schema, $oldPackage->fresh()->dynamic_schema);
+        $this->get(route('paket.show', $oldPackage))->assertOk()->assertSee($skin->label);
+        $this->assertDatabaseCount('pakets', 1);
+    }
+
+    public function test_legacy_items_in_existing_packages_remain_editable_without_becoming_new_package_options(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+        $package = Paket::factory()->master()->create(['active_items' => ['kulit' => true]]);
+
+        $this->get(route('paket.edit', $package))->assertOk()->assertSee('value="kulit"', false)->assertDontSee('value="rontgen"', false);
+        $this->put(route('paket.update', $package), ['nama_paket' => 'Paket lama dipertahankan', 'items' => ['kulit']])->assertSessionHasNoErrors();
+        $this->assertSame(['kulit' => true], $package->fresh()->active_items);
+        $this->get(route('paket.create'))->assertOk()->assertDontSee('value="kulit"', false);
+        $item = McuItem::factory()->create(['label' => 'Pertanyaan baru']);
+        $this->get(route('paket.create'))->assertOk()->assertSee('value="'.$item->id.'"', false)->assertSee('Pertanyaan baru');
     }
 
     public function test_master_and_exam_snapshots_remain_independent_across_patients(): void

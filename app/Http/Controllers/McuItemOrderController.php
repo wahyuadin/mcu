@@ -20,7 +20,7 @@ class McuItemOrderController extends Controller
             'category' => $category->name,
             'version' => $this->version($items),
             'items' => $items->map(fn (McuItem $item): array => ['id' => $item->id, 'label' => $item->label, 'type' => $item->inputLabel(), 'is_active' => $item->is_active])->values(),
-        ]);
+        ])->header('Cache-Control', 'no-store, private');
     }
 
     public function update(Request $request, McuCategory $category): JsonResponse

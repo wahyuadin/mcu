@@ -26,4 +26,9 @@ class McuCategory extends Model implements Auditable
     {
         return $this->hasMany(McuItem::class)->orderBy('sort_order')->orderBy('label');
     }
+
+    public function subcategories(): HasMany
+    {
+        return $this->hasMany(McuSubcategory::class)->orderBy('sort_order')->orderBy('name');
+    }
 }

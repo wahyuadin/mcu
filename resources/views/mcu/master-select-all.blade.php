@@ -1,0 +1,1 @@
+<th scope="col" class="w-20 px-5 py-4"><label class="flex cursor-pointer items-center gap-2 text-xs normal-case"><input type="checkbox" data-bulk-delete-all aria-label="Pilih semua pada halaman ini" class="h-4 w-4 shrink-0 rounded border-slate-300 accent-[#00008B]">Pilih semua</label></th>

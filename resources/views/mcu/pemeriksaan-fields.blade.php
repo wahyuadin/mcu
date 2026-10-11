@@ -94,10 +94,15 @@
             </div></details></section>
         @endif
     @endforeach
-@elseif($tab === 'dinamis')
-    @foreach($exam->dynamicGroups($peserta) as $group)
+@elseif(isset($categoryGroups[$tab]))
+    @foreach([$categoryGroups[$tab]] as $group)
         <section class="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6"><h3 class="text-lg font-bold">{{ $group['name'] }}</h3>
-            @foreach($group['items'] as $item)
+            @foreach(\App\LaboratoryResult::sections($group['items']) as $subsection)
+                @if($subsection['name'])<h4 class="border-b border-slate-200 pb-3 font-bold">{{ $subsection['name'] }}</h4>@endif
+                @php($labItems = array_values(array_filter($subsection['items'], fn ($item) => $item['type'] === 'laboratory')))
+                @if($labItems) @include('mcu.laboratory-fields', ['items' => $labItems]) @endif
+            @foreach($subsection['items'] as $item)
+                @if($item['type'] === 'laboratory') @continue @endif
                 @php($answer = old('dynamic_answers.'.$item['id'], ($exam->dynamic_answers ?? [])[$item['id']] ?? null))
                 @if($item['type'] === 'label')
                     <div class="rounded-xl bg-blue-50 p-4"><h4 class="font-semibold">{{ $item['label'] }}</h4><p class="mt-2 whitespace-pre-line text-sm text-blue-900">{{ $item['help_text'] }}</p></div>
@@ -112,6 +117,7 @@
                     @include('mcu.field', ['field' => 'dynamic_answers.'.$item['id'], 'label' => $item['label'].($item['required'] ? ' *' : ' (opsional)'), 'type' => $item['type'] === 'number' ? 'number' : 'textarea', 'step' => 'any', 'value' => ($exam->dynamic_answers ?? [])[$item['id']] ?? null])
                     @if($item['help_text'])<p class="text-xs text-slate-500">{{ $item['help_text'] }}</p>@endif
                 @endif
+            @endforeach
             @endforeach
         </section>
     @endforeach

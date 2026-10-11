@@ -12,7 +12,7 @@ test('mapping inputs are required only for radio questions and reappear when swi
     const fields = [{}, {}];
     const mapping = { querySelectorAll: () => fields };
     const hint = {};
-    const card = { querySelector: (selector) => selector === '[data-question-field="input_type"]' ? type : (selector === '[data-radio-mapping]' ? mapping : hint) };
+    const card = { querySelector: (selector) => selector === '[data-question-field="input_type"]' ? type : (selector === '[data-radio-mapping]' ? mapping : (selector === '[data-answer-hint]' ? hint : null)) };
     configureQuestionCard(card);
     assert.equal(mapping.hidden, false);
     assert.equal(fields[0].required, true);
@@ -30,6 +30,50 @@ test('mapping inputs are required only for radio questions and reappear when swi
 
 test('pages without a master form are unaffected', () => {
     assert.doesNotThrow(() => runInNewContext(source.replace(/^export /gm, ''), { document: { querySelectorAll: () => [] } }));
+});
+
+test('laboratory editor requires only the bounds relevant to the selected result and rule', () => {
+    const field = (value = '') => ({ value, events: {}, label: {}, addEventListener(event, callback) { this.events[event] = callback; }, closest() { return this.label; }, removeAttribute(name) { delete this[name]; } });
+    const fields = Object.fromEntries(['lab_default_result', 'lab_rule', 'lab_min', 'lab_max', 'lab_normal_values', 'lab_reference'].map((name) => [name, field()]));
+    fields.lab_reference.value = '0–10';
+    fields.lab_rule.value = 'range';
+    fields.lab_rule.options = ['range', 'lt', 'lte', 'gt', 'gte', 'text'].map((value) => ({ value }));
+    const laboratory = { querySelector: (selector) => fields[selector.match(/data-question-field="(.*?)"/)[1]] };
+    const type = field('number');
+    const hint = {};
+    const mapping = { querySelectorAll: () => [] };
+    const card = { querySelector: (selector) => ({ '[data-question-field="input_type"]': type, '[data-radio-mapping]': mapping, '[data-answer-hint]': hint, '[data-laboratory-mapping]': laboratory })[selector] };
+    configureQuestionCard(card);
+    assert.equal(laboratory.disabled, false);
+    assert.equal(fields.lab_min.required, true);
+    assert.equal(fields.lab_max.required, true);
+    assert.equal(fields.lab_normal_values.disabled, true);
+    assert.equal(fields.lab_default_result.type, 'number');
+    fields.lab_rule.value = 'lt'; fields.lab_rule.events.change();
+    assert.equal(fields.lab_min.disabled, true);
+    assert.equal(fields.lab_max.required, true);
+    type.value = 'text'; type.events.change();
+    assert.equal(fields.lab_rule.value, 'text');
+    assert.equal(fields.lab_normal_values.required, true);
+    assert.equal(fields.lab_max.disabled, true);
+    type.value = 'number'; type.events.change();
+    assert.equal(laboratory.hidden, false);
+    assert.equal(fields.lab_default_result.type, 'number');
+    assert.equal(fields.lab_min.required, true);
+    type.value = 'text'; type.events.change();
+    assert.equal(laboratory.hidden, false);
+    assert.equal(fields.lab_default_result.type, 'text');
+    assert.equal(fields.lab_default_result.min, undefined);
+    assert.equal(fields.lab_rule.value, 'text');
+    assert.equal(fields.lab_normal_values.required, true);
+    fields.lab_reference.value = ''; fields.lab_reference.events.input();
+    assert.equal(fields.lab_normal_values.required, false);
+    fields.lab_default_result.value = 'Normal'; fields.lab_default_result.events.input();
+    assert.equal(fields.lab_reference.required, true);
+    assert.equal(fields.lab_normal_values.required, true);
+    type.value = 'radio'; type.events.change();
+    assert.equal(laboratory.disabled, true);
+    assert.equal(fields.lab_reference.required, false);
 });
 
 class Field {
