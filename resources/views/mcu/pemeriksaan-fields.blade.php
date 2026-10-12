@@ -1,6 +1,14 @@
 @if($tab === 'identitas')
     <section class="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6">
-        <div class="flex flex-wrap items-center justify-between gap-4"><h3 class="text-lg font-bold">Identitas episode MCU</h3><button type="button" data-checkpoint-print data-print-url="{{ route('pemeriksaan.checkpoint', [$kunjungan, $peserta]) }}" class="rounded-xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">Cetak PDF</button></div>
+        <div class="flex flex-wrap items-center justify-between gap-4"><h3 class="text-lg font-bold">Identitas episode MCU</h3>
+            <details data-print-dropdown class="relative">
+                <summary class="cursor-pointer list-none rounded-xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white">Cetak ▾</summary>
+                <div class="absolute right-0 z-20 mt-2 grid w-48 gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+                    <button type="button" data-checkpoint-print data-print-url="{{ route('pemeriksaan.checkpoint', [$kunjungan, $peserta]) }}" class="rounded-lg px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50">Cetak PDF</button>
+                    <button type="button" data-label-open aria-haspopup="dialog" aria-controls="examination-label-modal" class="rounded-lg px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100">Cetak label</button>
+                </div>
+            </details>
+        </div>
         <p data-checkpoint-print-status role="status" aria-live="polite" class="text-sm text-slate-500"></p>
         <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
             <div class="flex shrink-0 justify-center rounded-xl bg-slate-50 p-4 lg:w-44">
@@ -18,6 +26,7 @@
             <button type="button" data-photo-modal-open aria-haspopup="dialog" aria-controls="patient-photo-modal" class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"><svg aria-hidden="true" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h4l2-3h4l2 3h4v13H4z"/><circle cx="12" cy="13" r="3" stroke-width="2"/></svg>Ganti foto pasien</button>
         </div>@endif
     </section>
+    @include('mcu.label-modal')
     @if(!$readonly)
         <dialog id="patient-photo-modal" data-photo-modal @if($errors->has('foto_pasien')) data-photo-modal-errors @endif aria-labelledby="patient-photo-modal-title" class="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-5xl overflow-y-auto rounded-2xl border-0 bg-slate-50 p-0 text-slate-900 shadow-xl">
             <div class="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-slate-200 bg-white p-5"><div><h2 id="patient-photo-modal-title" class="text-lg font-bold">Ganti foto pasien</h2><p class="mt-1 text-sm text-slate-500">{{ $peserta->nama_karyawan }}</p></div><button type="button" data-photo-modal-close autofocus aria-label="Tutup modal foto" class="rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold">Tutup</button></div>
@@ -103,11 +112,12 @@
     @endforeach
 @elseif(isset($categoryGroups[$tab]))
     @foreach([$categoryGroups[$tab]] as $group)
-        <section class="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6"><h3 class="text-lg font-bold">{{ $group['name'] }}</h3>
+        <section data-exam-category="{{ $group['id'] }}" class="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6"><h3 class="text-lg font-bold">{{ $group['name'] }}</h3>
             @if($group['has_responsible_doctor'] ?? true)
                 @include('mcu.field', ['field' => 'category_doctors.'.$group['id'], 'label' => 'Dokter Pemeriksa (opsional)', 'type' => 'select', 'options' => $doctors->pluck('nama_dokter', 'id'), 'value' => ($exam->category_doctors ?? [])[$group['id']] ?? null])
             @endif
             @foreach(\App\LaboratoryResult::sections($group['items']) as $subsection)
+                <div data-exam-subcategory="{{ $subsection['items'][0]['subcategory']['id'] ?? $group['id'] }}" tabindex="-1" class="grid min-w-0 scroll-mt-24 gap-5 rounded-xl p-3">
                 @if($subsection['name'])<h4 class="border-b border-slate-200 pb-3 font-bold">{{ $subsection['name'] }}</h4>@endif
                 @php($labItems = array_values(array_filter($subsection['items'], fn ($item) => $item['type'] === 'laboratory')))
                 @if($labItems) @include('mcu.laboratory-fields', ['items' => $labItems]) @endif
@@ -129,6 +139,7 @@
                     @include('mcu.dynamic-attachment-field', ['item' => $item])
                 @endif
             @endforeach
+                </div>
             @endforeach
         </section>
     @endforeach

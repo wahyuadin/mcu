@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\LabelBarcode;
 use App\Models\McuCategory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -24,7 +26,7 @@ class McuCategoryController extends Controller
 
     public function create(): View
     {
-        return view('mcu.masters.category-form', ['category' => new McuCategory(['is_active' => true, 'sort_order' => 0])]);
+        return $this->form(new McuCategory(['is_active' => true, 'sort_order' => 0]));
     }
 
     public function store(Request $request): RedirectResponse
@@ -38,7 +40,7 @@ class McuCategoryController extends Controller
 
     public function edit(McuCategory $category): View
     {
-        return view('mcu.masters.category-form', ['category' => $category]);
+        return $this->form($category);
     }
 
     public function update(Request $request, McuCategory $category): RedirectResponse
@@ -64,9 +66,21 @@ class McuCategoryController extends Controller
         return redirect()->route('mcu-category.index')->with('success', 'Kategori dihapus. Paket dan hasil pemeriksaan tersimpan tidak berubah.');
     }
 
-    /** @return array{name: string, sort_order?: int, is_active: bool, has_responsible_doctor?: bool} */
+    private function form(McuCategory $category): View
+    {
+        $sampleUrl = route('pemeriksaan.edit', ['00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002', 'tab' => 'kategori-00000000-0000-4000-8000-000000000003', 'subcategory' => '00000000-0000-4000-8000-000000000004']);
+
+        return view('mcu.masters.category-form', ['category' => $category->load('subcategories'), 'labelBarcodes' => (new LabelBarcode)->images($sampleUrl)]);
+    }
+
+    /** @return array<string, mixed> */
     private function validated(Request $request): array
     {
-        return $request->validate(['name' => ['required', 'string', 'max:255'], 'sort_order' => ['sometimes', 'integer', 'min:0', 'max:9999'], 'is_active' => ['required', 'boolean'], 'has_responsible_doctor' => ['sometimes', 'required', 'boolean']]);
+        return $request->validate(['name' => ['required', 'string', 'max:255'], 'sort_order' => ['sometimes', 'integer', 'min:0', 'max:9999'], 'is_active' => ['required', 'boolean'], 'has_responsible_doctor' => ['sometimes', 'required', 'boolean'],
+            'label_enabled' => ['sometimes', 'required', 'boolean'],
+            'label_barcode_type' => ['required_if:label_enabled,1', Rule::in(['qr', 'code128'])],
+            'label_width_mm' => ['required_if:label_enabled,1', 'integer', 'min:40', 'max:300'],
+            'label_height_mm' => ['required_if:label_enabled,1', 'integer', 'min:30', 'max:200'],
+        ]);
     }
 }

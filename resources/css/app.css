@@ -9,6 +9,30 @@
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
 
+[data-exam-subcategory][data-label-selected="true"] {
+    outline: 2px solid #00008b;
+    outline-offset: 2px;
+    background: #eff6ff;
+}
+
+[data-label-modal] {
+    opacity: 0;
+    transition: opacity 200ms var(--ease-out), display 200ms allow-discrete, overlay 200ms allow-discrete;
+}
+[data-label-modal][open] { opacity: 1; }
+[data-label-modal]::backdrop {
+    background: rgb(15 23 42 / 60%);
+    opacity: 0;
+    transition: opacity 200ms var(--ease-out), display 200ms allow-discrete, overlay 200ms allow-discrete;
+}
+[data-label-modal][open]::backdrop { opacity: 1; }
+@starting-style {
+    [data-label-modal][open], [data-label-modal][open]::backdrop { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+    [data-label-modal], [data-label-modal]::backdrop { transition-duration: 125ms; }
+}
+
 [data-photo-modal] {
     opacity: 0;
     transform: scale(0.97);

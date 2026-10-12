@@ -1,4 +1,8 @@
 <form data-patient-photo method="POST" enctype="multipart/form-data" action="{{ route('pemeriksaan.photo', [$kunjungan, $peserta]) }}" class="grid gap-6">@csrf
+    @if($labelTarget ?? null)
+        <input type="hidden" name="return_tab" value="{{ $labelTarget['tab'] }}">
+        <input type="hidden" name="return_subcategory" value="{{ $labelTarget['subcategory'] }}">
+    @endif
     @error('foto_pasien')<p role="alert" class="rounded-xl bg-red-50 p-4 text-sm text-red-700">{{ $message }} Pilih ulang foto sebelum menyimpan.</p>@enderror
     <div class="grid items-start gap-6 lg:grid-cols-2">
         <section class="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6">

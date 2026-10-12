@@ -14,6 +14,29 @@ class KunjunganDetailTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_company_contact_details_appear_below_company_name_in_address_email_phone_order(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'petugas']));
+        $visit = RencanaKunjungan::factory()->create();
+        $visit->perusahaan->update(['nama_perusahaan' => 'Perusahaan Kontak MCU', 'alamat' => "Jl. Contoh No. 10\nJakarta <script>alert(1)</script>", 'email' => 'kontak@example.test', 'telp' => '021-12345678']);
+
+        $this->get(route('kunjungan-mcu.show', $visit))->assertOk()
+            ->assertSeeInOrder(['Perusahaan Kontak MCU', 'Jl. Contoh No. 10', 'kontak@example.test', '021-12345678'])
+            ->assertDontSee('>Alamat<', false)->assertDontSee('>Email<', false)->assertDontSee('>No. telp<', false)
+            ->assertSee('Jakarta <script>alert(1)</script>')->assertDontSee('<script>alert(1)</script>', false);
+    }
+
+    public function test_missing_company_contact_details_show_clear_placeholders(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'petugas']));
+        $visit = RencanaKunjungan::factory()->create();
+        $visit->perusahaan->update(['alamat' => null, 'email' => null, 'telp' => null]);
+
+        $this->get(route('kunjungan-mcu.show', $visit))->assertOk()
+            ->assertSeeInOrder(['Belum diisi', 'Belum diisi', 'Belum diisi'])
+            ->assertDontSee('>Alamat<', false)->assertDontSee('>Email<', false)->assertDontSee('>No. telp<', false);
+    }
+
     public function test_visit_counts_and_package_totals_stay_global_when_participants_are_filtered(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));

@@ -1,9 +1,49 @@
-<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Barcode Anamnesa</title>@vite(['resources/css/app.css', 'resources/js/app.js'])<style>@media print { .no-print { display: none; } @page { size: A4; margin: 20mm; } }</style></head>
-<body class="bg-white text-slate-800"><main class="mx-auto grid max-w-lg gap-5 p-6 text-center">
-<div class="flex items-center justify-between gap-4"><img src="{{ asset('Template/assets/logo-nayaka.jpeg') }}" alt="Nayaka Era Husada" class="h-12 w-36 object-contain">@if($kunjungan->perusahaan->logo_path)<img src="{{ route('perusahaan.logo', $kunjungan->perusahaan) }}" alt="Logo perusahaan" class="h-12 w-28 object-contain">@endif</div>
-<h1 class="text-2xl font-bold">Barcode Anamnesa</h1><p>{{ $kunjungan->nomor_kunjungan }}<br>{{ $kunjungan->perusahaan->nama_perusahaan }}</p>
-<img src="{{ $qr }}" alt="QR formulir anamnesa kunjungan" class="mx-auto h-64 w-64"><p>Scan untuk mengisi anamnesa melalui HP.<br>Tidak perlu login.</p>
-<label class="grid gap-2 text-sm">Tautan formulir<input readonly data-anamnesa-url value="{{ $url }}" class="min-h-12 w-full rounded-lg border border-slate-300 px-3 text-base" onclick="this.select()"></label>
-<div class="no-print flex flex-wrap justify-center gap-3"><button type="button" data-copy-anamnesa class="min-h-11 rounded-lg border border-slate-300 px-4">Salin tautan</button><a href="{{ $url }}" target="_blank" rel="noopener noreferrer" class="min-h-11 rounded-lg border border-slate-300 px-4 py-3">Pratinjau formulir</a><button onclick="window.print()" class="min-h-11 rounded-lg bg-blue-900 px-4 text-white">Cetak barcode</button></div><p data-copy-status role="status" class="no-print text-sm"></p>
-<p class="text-sm text-slate-500">Siapkan NIK KTP atau NIK/NIP karyawan dan tanggal lahir. Tautan tidak berlaku setelah kunjungan ditutup.</p>
-</main></body></html>
+<!doctype html>
+<html lang="id">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>QR Code Anamnesa</title>@vite(['resources/css/app.css', 'resources/js/app.js'])<style>
+        @media print {
+            .no-print {
+                display: none;
+            }
+
+            @page {
+                size: A4;
+                margin: 20mm;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-white text-slate-800">
+    <main class="mx-auto grid max-w-lg gap-5 p-6 text-center">
+        <div class="flex items-center justify-between gap-4"><img src="{{ asset('template/assets/logo.png') }}"
+                alt="Nayaka Era Husada" class="h-12 w-36 object-contain">
+            @if ($kunjungan->perusahaan->logo_path)
+                <img src="{{ route('perusahaan.logo', $kunjungan->perusahaan) }}" alt="Logo perusahaan"
+                    class="h-12 w-28 object-contain">
+            @endif
+        </div>
+        <h1 class="text-2xl font-bold">QR Code Anamnesa</h1>
+        <p>{{ $kunjungan->nomor_kunjungan }}<br>{{ $kunjungan->perusahaan->nama_perusahaan }}</p>
+        <img src="{{ $qr }}" alt="QR formulir anamnesa kunjungan" class="mx-auto h-64 w-64">
+        <p>Scan untuk mengisi anamnesa.</p>
+        <label class="grid gap-2 text-sm">Tautan formulir<input readonly data-anamnesa-url value="{{ $url }}"
+                class="min-h-12 w-full rounded-lg border border-slate-300 px-3 text-base"
+                onclick="this.select()"></label>
+        <div class="no-print flex flex-wrap justify-center gap-3"><button type="button" data-copy-anamnesa
+                class="min-h-11 rounded-lg border border-slate-300 px-4">Salin tautan</button><a
+                href="{{ $url }}" target="_blank" rel="noopener noreferrer"
+                class="min-h-11 rounded-lg border border-slate-300 px-4 py-3">Pratinjau formulir</a><button
+                onclick="window.print()" class="min-h-11 rounded-lg bg-blue-900 px-4 text-white">Cetak QR Code</button>
+        </div>
+        <p data-copy-status role="status" class="no-print text-sm"></p>
+        <p class="text-sm text-slate-500">Siapkan NIK KTP atau NIK/NIP karyawan dan tanggal lahir. Tautan tidak berlaku
+            setelah kunjungan ditutup.</p>
+    </main>
+</body>
+
+</html>

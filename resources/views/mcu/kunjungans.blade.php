@@ -63,10 +63,17 @@
                         @php($statusKey = $kunjungan->is_closing ? 'closed' : $kunjungan->status)
                         <article class="grid gap-4 py-5">
                             <div class="flex flex-wrap items-start justify-between gap-3">
-                                <div class="min-w-0">
+                                <div class="flex max-w-full min-w-0 items-center gap-3">
+                                    @if($kunjungan->perusahaan->logo_path)
+                                        <img src="{{ route('perusahaan.logo', $kunjungan->perusahaan) }}" alt="Logo {{ $kunjungan->perusahaan->nama_perusahaan }}" loading="lazy" class="h-12 w-12 shrink-0 rounded-xl border border-slate-100 bg-white object-contain p-2">
+                                    @else
+                                        @include('mcu.company-icon')
+                                    @endif
+                                    <div class="min-w-0">
                                     <h4 class="break-words font-bold">{{ $kunjungan->perusahaan->nama_perusahaan }}</h4>
                                     <p class="mt-2 break-all text-xs text-slate-500">{{ $kunjungan->nomor_kunjungan }} ·
                                         {{ $kunjungan->periode_kunjungan }}</p>
+                                    </div>
                                 </div><span
                                     class="rounded-full px-4 py-2 text-xs font-bold {{ match ($statusKey) {'completed' => 'bg-emerald-50 text-emerald-700','ongoing' => 'bg-blue-50 text-blue-800','closed' => 'bg-slate-100 text-slate-500',default => 'bg-amber-50 text-amber-800'} }}">{{ $statusLabels[$statusKey] ?? $statusKey }}</span>
                             </div>

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\McuCategory;
 use App\Models\McuItem;
+use App\Models\McuSubcategory;
 use App\Models\Paket;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -27,8 +28,13 @@ class MasterBulkDeleteController extends Controller
         return $this->deleteSelected($request, McuItem::class, 'mcu-item.index', ['category', 'page']);
     }
 
+    public function subcategories(Request $request): RedirectResponse
+    {
+        return $this->deleteSelected($request, McuSubcategory::class, 'mcu-subcategory.index', ['q', 'category', 'page']);
+    }
+
     /**
-     * @param  class-string<Paket|McuCategory|McuItem>  $modelClass
+     * @param  class-string<Paket|McuCategory|McuItem|McuSubcategory>  $modelClass
      * @param  list<string>  $filters
      */
     private function deleteSelected(Request $request, string $modelClass, string $indexRoute, array $filters): RedirectResponse
@@ -50,7 +56,7 @@ class MasterBulkDeleteController extends Controller
                     }
                     $name = match (true) {
                         $record instanceof Paket => $record->nama_paket,
-                        $record instanceof McuCategory => $record->name,
+                        $record instanceof McuCategory, $record instanceof McuSubcategory => $record->name,
                         default => $record->label,
                     };
                     if ($record instanceof Paket && $record->karyawans()->exists()) {
@@ -61,6 +67,9 @@ class MasterBulkDeleteController extends Controller
                     }
                     if ($record instanceof McuCategory && $record->items()->exists()) {
                         return ['name' => $name, 'deleted' => false, 'reason' => 'Kategori masih memiliki item. Hapus atau pindahkan item terlebih dahulu.'];
+                    }
+                    if ($record instanceof McuSubcategory && $record->items()->exists()) {
+                        return ['name' => $name, 'deleted' => false, 'reason' => 'Subkategori masih memiliki item. Hapus atau pindahkan item terlebih dahulu.'];
                     }
                     if (! $record->delete()) {
                         return ['name' => $name, 'deleted' => false, 'reason' => 'Penghapusan ditolak. Data tidak diubah.'];

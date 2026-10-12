@@ -14,13 +14,26 @@ class PublicAnamnesaTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_visit_button_modal_and_print_page_use_qr_code_labels(): void
+    {
+        $participant = $this->participant();
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+
+        $this->get(route('kunjungan-mcu.index'))->assertOk()
+            ->assertSee('▦</span>QR Code</button>', false)
+            ->assertSee('QR Code Anamnesa')->assertSee('title="QR Code formulir anamnesa"', false)
+            ->assertDontSee('▦</span>Barcode</button>', false);
+        $this->post(route('anamnesa.barcode', $participant->rencanaKunjungan))->assertOk()
+            ->assertSee('QR Code Anamnesa')->assertSee('Cetak QR Code')->assertDontSee('Barcode Anamnesa');
+    }
+
     public function test_barcode_requires_operator_access_and_reuses_encrypted_token(): void
     {
         $participant = $this->participant();
         $url = route('anamnesa.barcode', $participant->rencanaKunjungan);
         $this->post($url)->assertRedirect(route('login'));
         $this->actingAs(User::factory()->create(['role' => 'viewer']))->post($url)->assertForbidden();
-        $this->actingAs(User::factory()->create(['role' => 'admin']))->post($url)->assertOk()->assertSee('Barcode Anamnesa')->assertSee('Pratinjau formulir')->assertDontSee('Nonaktifkan barcode lama');
+        $this->actingAs(User::factory()->create(['role' => 'admin']))->post($url)->assertOk()->assertSee('QR Code Anamnesa')->assertSee('Pratinjau formulir')->assertDontSee('Nonaktifkan barcode lama');
         $token = $participant->rencanaKunjungan->fresh()->anamnesa_token;
         $this->assertSame(64, strlen($token));
         $this->post($url)->assertOk()->assertSee(route('anamnesa.public', $token), false);

@@ -18,6 +18,24 @@ class LaboratoryConfigurationTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_subcategory_list_preserves_filters_statuses_and_edit_delete_actions(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+        $category = McuCategory::factory()->create(['name' => 'LAB']);
+        $subcategory = McuSubcategory::factory()->create(['mcu_category_id' => $category->id, 'name' => 'Hematologi', 'is_active' => false]);
+        McuSubcategory::factory()->create(['name' => 'Kelompok lain']);
+
+        $this->get(route('mcu-subcategory.index'))->assertOk()
+            ->assertSee('Daftar subkategori MCU')->assertSee('Aktif')->assertSee('Nonaktif')
+            ->assertSee('aria-label="Ubah Hematologi"', false)->assertSee('aria-label="Hapus Hematologi"', false)
+            ->assertSee(route('mcu-subcategory.edit', $subcategory))->assertSee(route('mcu-subcategory.destroy', $subcategory))
+            ->assertSee('Atur urutan subkategori')->assertSee('Urutan');
+        $this->get(route('mcu-subcategory.index', ['category' => $category->id, 'q' => 'Hema']))->assertOk()
+            ->assertSee('Hematologi')->assertDontSee('Kelompok lain')->assertSee('value="Hema"', false)->assertSee('Reset');
+        $this->get(route('mcu-subcategory.index', ['q' => 'Tidak ditemukan']))->assertOk()
+            ->assertSee('Tidak ada subkategori yang cocok dengan filter.')->assertDontSee('aria-label="Ubah Hematologi"', false);
+    }
+
     public function test_admin_builds_subcategory_and_laboratory_item_and_package_snapshot(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));

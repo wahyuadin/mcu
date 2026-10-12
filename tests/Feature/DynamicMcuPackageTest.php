@@ -7,9 +7,10 @@ use App\Models\Dokter;
 use App\Models\Karyawan;
 use App\Models\McuCategory;
 use App\Models\McuItem;
+use App\Models\McuSubcategory;
 use App\Models\Paket;
 use App\Models\User;
-use Database\Seeders\McuFormMasterSeeder;
+use Database\Seeders\McuTemplateMasterSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -150,26 +151,26 @@ class DynamicMcuPackageTest extends TestCase
         $this->assertContains($item->category->name.' — Hepatitis', $participant->fresh()->anamnesa->progress($participant)['dinamis']['missing']);
     }
 
-    public function test_existing_master_import_is_idempotent_and_does_not_change_packages_or_bmi(): void
+    public function test_template_master_import_is_idempotent_and_does_not_change_packages_or_bmi(): void
     {
         $package = Paket::factory()->create(['active_items' => ['bmi' => true, 'tinggi_badan' => true, 'berat_badan' => true]]);
-        $this->seed(McuFormMasterSeeder::class);
+        $this->seed(McuTemplateMasterSeeder::class);
         $count = McuItem::count();
-        $item = McuItem::where('legacy_key', 'kulit')->firstOrFail();
-        $item->update(['label' => 'Kulit diperbarui']);
-        $this->seed(McuFormMasterSeeder::class);
+        $item = McuItem::where('label', 'Irama')->firstOrFail();
+        $item->update(['label' => 'Irama diperbarui']);
+        $this->seed(McuTemplateMasterSeeder::class);
         $this->assertSame($count, McuItem::count());
-        $this->assertSame('Kulit diperbarui', $item->fresh()->label);
-        $this->assertSame('existing', $item->input_type);
+        $this->assertSame('Irama', $item->fresh()->label);
+        $this->assertSame('text', $item->input_type);
         $this->assertSame(0, McuItem::whereIn('legacy_key', ['bmi', 'tinggi_badan', 'keluhan_saat_ini'])->count());
         $this->assertSame(['bmi' => true, 'tinggi_badan' => true, 'berat_badan' => true], $package->fresh()->active_items);
         $this->assertSame(22.49, Anamnesa::calculateBmi(170, 65)['bmi']);
-        $this->actingAs(User::factory()->create(['role' => 'admin']))->get(route('paket.create'))->assertOk()->assertSee('BMI &amp; Kategori BMI', false)->assertSee('Kulit diperbarui');
+        $this->actingAs(User::factory()->create(['role' => 'admin']))->get(route('paket.create'))->assertOk()->assertSee('BMI &amp; Kategori BMI', false)->assertSee('Irama');
         $this->post(route('paket.store'), ['nama_paket' => 'Paket existing', 'master_items' => [$item->id]])->assertSessionHasNoErrors();
         $existing = Paket::where('nama_paket', 'Paket existing')->firstOrFail();
         $this->assertSame([], $existing->active_items);
         $this->assertSame('text', $existing->dynamic_schema[0]['items'][0]['type']);
-        $this->put(route('mcu-item.update', $item), array_replace($this->itemPayload($item->category), ['label' => 'Kulit', 'yes_report' => 'Ada kelainan', 'no_report' => 'Tidak ada kelainan']))->assertSessionHasNoErrors();
+        $this->put(route('mcu-item.update', $item), array_replace($this->itemPayload($item->category), ['label' => 'Irama', 'yes_report' => 'Ada kelainan', 'no_report' => 'Tidak ada kelainan']))->assertSessionHasNoErrors();
         $this->post(route('paket.store'), ['nama_paket' => 'Paket radio baru', 'master_items' => [$item->id]])->assertSessionHasNoErrors();
         $new = Paket::where('nama_paket', 'Paket radio baru')->firstOrFail();
         $this->assertSame([], $new->active_items);
@@ -213,12 +214,15 @@ class DynamicMcuPackageTest extends TestCase
     public function test_deleting_all_masters_does_not_restore_legacy_options_in_new_package_form(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
-        $this->seed(McuFormMasterSeeder::class);
-        $skin = McuItem::where('legacy_key', 'kulit')->firstOrFail();
+        $this->seed(McuTemplateMasterSeeder::class);
+        $skin = McuItem::where('label', 'Irama')->firstOrFail();
         $schema = [['id' => $skin->category->id, 'name' => $skin->category->name, 'order' => 0, 'items' => [$skin->definition()]]];
         $oldPackage = Paket::factory()->master()->create(['dynamic_schema' => $schema]);
         foreach (McuItem::pluck('id')->chunk(30) as $ids) {
             $this->post(route('mcu-item.bulk-destroy'), ['ids' => $ids->values()->all()])->assertRedirect(route('mcu-item.index'));
+        }
+        foreach (McuSubcategory::pluck('id') as $id) {
+            $this->delete(route('mcu-subcategory.destroy', $id))->assertRedirect(route('mcu-subcategory.index'));
         }
         foreach (McuCategory::pluck('id')->chunk(30) as $ids) {
             $this->post(route('mcu-category.bulk-destroy'), ['ids' => $ids->values()->all()])->assertRedirect(route('mcu-category.index'));

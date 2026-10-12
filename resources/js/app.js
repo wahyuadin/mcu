@@ -8,6 +8,7 @@ import './patient-import';
 import './master-bulk-delete';
 import './laboratory-results';
 import './public-anamnesa';
+import './examination-label';
 
 const examForm = document.querySelector('[data-exam-form]');
 

@@ -8,13 +8,21 @@
 <div class="mx-auto grid max-w-7xl gap-6">
     <a href="{{ route('kunjungan-mcu.index') }}" class="justify-self-start text-sm font-semibold text-slate-500">← Kembali ke Kunjungan MCU</a>
     <section class="flex flex-wrap items-start justify-between gap-5 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
-        <div class="flex min-w-0 items-center gap-4">
+        <div class="flex max-w-full min-w-0 items-start gap-4">
             @if($kunjungan->perusahaan->logo_path)
                 <img src="{{ route('perusahaan.logo', $kunjungan->perusahaan) }}" alt="Logo {{ $kunjungan->perusahaan->nama_perusahaan }}" class="h-16 w-16 shrink-0 rounded-2xl border border-slate-100 bg-white object-contain p-2 sm:h-20 sm:w-20">
             @else
                 @include('mcu.company-icon')
             @endif
-            <div class="min-w-0"><h2 class="break-words text-2xl font-bold sm:text-3xl">{{ $kunjungan->perusahaan->nama_perusahaan }}</h2><p class="mt-3 break-words text-sm text-slate-500">{{ $kunjungan->nomor_kunjungan }} · {{ $kunjungan->periode_kunjungan }}</p></div>
+            <div class="min-w-0">
+                <h2 class="break-words text-2xl font-bold sm:text-3xl">{{ $kunjungan->perusahaan->nama_perusahaan }}</h2>
+                <div class="mt-3 grid gap-2 text-sm text-slate-500">
+                    <p class="whitespace-pre-line break-words">{{ $kunjungan->perusahaan->alamat ?: 'Belum diisi' }}</p>
+                    <p class="break-all">{{ $kunjungan->perusahaan->email ?: 'Belum diisi' }}</p>
+                    <p class="break-words">{{ $kunjungan->perusahaan->telp ?: 'Belum diisi' }}</p>
+                </div>
+                <p class="mt-3 break-words text-sm text-slate-500">{{ $kunjungan->nomor_kunjungan }} · {{ $kunjungan->periode_kunjungan }}</p>
+            </div>
         </div>
         <div class="grid justify-items-start gap-3 sm:justify-items-end">
             @can('manage-mcu') @if(!$kunjungan->is_closing)<a href="{{ route('pasien.create', ['rencana_kunjungan_id' => $kunjungan->id]) }}" class="rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-800">+ Daftarkan peserta</a>@endif @endcan

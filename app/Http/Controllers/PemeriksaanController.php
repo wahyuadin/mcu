@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\ExaminationLabel;
 use App\McuCatalog;
 use App\Models\Anamnesa;
 use App\Models\Dokter;
@@ -16,6 +17,7 @@ use Endroid\QrCode\Writer\SvgWriter;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -33,9 +35,11 @@ class PemeriksaanController extends Controller
         $this->assertParticipant($kunjungan, $peserta);
         $peserta->load('paket', 'anamnesa.dokter', 'pasien', 'perusahaan');
         $exam = $peserta->anamnesa ?? new Anamnesa;
+        $labelService = new ExaminationLabel;
+        $labelTarget = $labelService->navigationTarget($peserta, $exam, $request->query('tab'), $request->query('subcategory'));
         $readonly = $kunjungan->is_closing || $exam->status === 'final' || in_array($peserta->status_pemeriksaan, ['batal', 'tidak_hadir'], true);
         if (! $readonly && (! $peserta->hasStoredPhoto() || $request->query('tab') === 'foto')) {
-            return view('mcu.pemeriksaan-foto', ['kunjungan' => $kunjungan, 'peserta' => $peserta, 'hasPhoto' => $peserta->hasStoredPhoto()]);
+            return view('mcu.pemeriksaan-foto', ['kunjungan' => $kunjungan, 'peserta' => $peserta, 'hasPhoto' => $peserta->hasStoredPhoto(), 'labelTarget' => $labelTarget]);
         }
         $selectedDoctors = array_filter([$exam->dokter_id, $exam->dokter_fisik_id, ...array_column($exam->penunjang ?? [], 'doctor_id'), ...array_values($exam->category_doctors ?? [])]);
         $categoryGroups = $exam->categoryGroups($peserta);
@@ -78,6 +82,8 @@ class PemeriksaanController extends Controller
             $examinations[$key] = ['label' => $group['name'], 'description' => count($group['items']).' item pemeriksaan', 'status' => $progress[$key]['status'], 'tab' => $key, 'anchor' => null, 'skipped' => false];
         }
 
+        $labelCategories = $tab === 'identitas' ? $labelService->categories($peserta, $exam) : [];
+
         return view('mcu.pemeriksaan', [
             'kunjungan' => $kunjungan, 'peserta' => $peserta, 'exam' => $exam, 'tabs' => $tabs,
             'categoryGroups' => $categoryGroups,
@@ -96,7 +102,37 @@ class PemeriksaanController extends Controller
             })->orderBy('nama_dokter')->get(),
             'readonly' => $readonly,
             'checkpoint' => $tab === 'identitas' ? $this->checkpointData($kunjungan, $peserta, $exam) : null,
+            'labelCategories' => $labelCategories,
+            'labelBarcodes' => $tab === 'identitas' ? $labelService->barcodes($peserta, $labelCategories) : null,
         ]);
+    }
+
+    public function labels(Request $request, RencanaKunjungan $kunjungan, Karyawan $peserta): Response|RedirectResponse
+    {
+        $this->assertParticipant($kunjungan, $peserta);
+        $peserta->load('paket', 'anamnesa');
+        $exam = $peserta->anamnesa ?? new Anamnesa;
+        $readonly = $kunjungan->is_closing || $exam->status === 'final' || in_array($peserta->status_pemeriksaan, ['batal', 'tidak_hadir'], true);
+        if (! $readonly && ! $peserta->hasStoredPhoto()) {
+            return redirect()->route('pemeriksaan.edit', [$kunjungan, $peserta, 'tab' => 'identitas']);
+        }
+        $categories = collect((new ExaminationLabel)->categories($peserta, $exam))->where('enabled', true)->keyBy('id');
+        $data = $request->validate([
+            'category' => ['required', 'uuid', Rule::in($categories->keys()->all())],
+            'subcategories' => ['required', 'array', 'list', 'min:1', 'max:30'],
+            'subcategories.*' => ['required', 'uuid', 'distinct'],
+        ]);
+        $category = $categories[$data['category']];
+        $allowed = array_column($category['subcategories'], 'id');
+        $request->validate(['subcategories.*' => [Rule::in($allowed)]]);
+        $selected = array_values(array_filter($category['subcategories'], fn (array $subcategory): bool => in_array($subcategory['id'], $data['subcategories'], true)));
+        $selectedCategory = array_replace($category, ['subcategories' => $selected]);
+
+        return response()->view('mcu.labels', [
+            'category' => $category, 'subcategories' => $selected, 'peserta' => $peserta,
+            'printedAt' => now()->format('d:m:Y H:i:s'),
+            'barcodes' => (new ExaminationLabel)->barcodes($peserta, [$selectedCategory])[$category['id']],
+        ])->header('Cache-Control', 'private, no-store');
     }
 
     public function checkpoint(RencanaKunjungan $kunjungan, Karyawan $peserta): View|RedirectResponse
@@ -539,7 +575,9 @@ class PemeriksaanController extends Controller
             throw $exception;
         }
 
-        return redirect()->route('pemeriksaan.edit', [$kunjungan, $peserta, 'tab' => 'identitas'])->with('success', 'Foto tersimpan sebagai WebP. Silakan periksa identitas pasien sebelum melanjutkan pemeriksaan.');
+        $target = (new ExaminationLabel)->navigationTarget($peserta, $peserta->anamnesa ?? new Anamnesa, $request->input('return_tab'), $request->input('return_subcategory'));
+
+        return redirect()->route('pemeriksaan.edit', [$kunjungan, $peserta, ...($target ?? ['tab' => 'identitas'])])->with('success', $target ? 'Foto tersimpan sebagai WebP. Bagian pemeriksaan dari label dibuka.' : 'Foto tersimpan sebagai WebP. Silakan periksa identitas pasien sebelum melanjutkan pemeriksaan.');
     }
 
     private function requirePhoto(Karyawan $participant): void

@@ -114,6 +114,39 @@ class McuController extends Controller
         return back()->with('success', 'Perusahaan ditambahkan.');
     }
 
+    public function editPerusahaan(Perusahaan $perusahaan): View
+    {
+        return view('mcu.perusahaan-form', ['perusahaan' => $perusahaan]);
+    }
+
+    public function updatePerusahaan(Request $request, Perusahaan $perusahaan): RedirectResponse
+    {
+        $data = $request->validate([
+            'nama_perusahaan' => ['required', 'string', 'max:255'],
+            'alamat' => ['nullable', 'string'],
+            'telp' => ['nullable', 'string', 'max:255'],
+            'email' => ['nullable', 'email', 'max:255'],
+        ]);
+        DB::transaction(function () use ($perusahaan, $data): void {
+            Perusahaan::whereKey($perusahaan->id)->lockForUpdate()->firstOrFail()->update($data);
+        });
+
+        return redirect()->route('perusahaan.index')->with('success', 'Perusahaan diperbarui.');
+    }
+
+    public function destroyPerusahaan(Perusahaan $perusahaan): RedirectResponse
+    {
+        DB::transaction(function () use ($perusahaan): void {
+            $company = Perusahaan::whereKey($perusahaan->id)->lockForUpdate()->firstOrFail();
+            if ($company->rencanaKunjungans()->withTrashed()->exists() || $company->karyawans()->withTrashed()->exists() || $company->pakets()->withTrashed()->exists()) {
+                throw ValidationException::withMessages(['perusahaan' => 'Perusahaan tidak dapat dihapus karena sudah memiliki kunjungan, peserta, atau paket MCU.']);
+            }
+            $company->delete();
+        });
+
+        return redirect()->route('perusahaan.index')->with('success', 'Perusahaan dihapus.');
+    }
+
     public function updatePerusahaanLogo(Request $request, Perusahaan $perusahaan, CompanyLogo $logos): RedirectResponse
     {
         $request->validate(['logo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048']]);

@@ -48,6 +48,9 @@ Route::middleware('auth')->group(function (): void {
     Route::middleware('can:manage-mcu')->group(function (): void {
         Route::get('/perusahaan', [McuController::class, 'perusahaans'])->name('perusahaan.index');
         Route::post('/perusahaan', [McuController::class, 'storePerusahaan'])->name('perusahaan.store');
+        Route::get('/perusahaan/{perusahaan}/edit', [McuController::class, 'editPerusahaan'])->name('perusahaan.edit');
+        Route::put('/perusahaan/{perusahaan}', [McuController::class, 'updatePerusahaan'])->name('perusahaan.update');
+        Route::delete('/perusahaan/{perusahaan}', [McuController::class, 'destroyPerusahaan'])->name('perusahaan.destroy');
         Route::put('/perusahaan/{perusahaan}/logo', [McuController::class, 'updatePerusahaanLogo'])->name('perusahaan.logo.update');
         Route::get('/rencana-kunjungan', [McuController::class, 'kunjungans'])->name('rencana-kunjungan.index');
         Route::post('/rencana-kunjungan', [McuController::class, 'storeKunjungan'])->name('rencana-kunjungan.store');
@@ -64,6 +67,7 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/master-kategori-mcu/{category}/urutan-item', [McuItemOrderController::class, 'show'])->name('mcu-item-order.show');
         Route::get('/master-kategori-mcu/{category}/urutan-subkategori', [McuSubcategoryOrderController::class, 'show'])->name('mcu-subcategory-order.show');
         Route::put('/master-kategori-mcu/{category}/urutan-subkategori', [McuSubcategoryOrderController::class, 'update'])->name('mcu-subcategory-order.update');
+        Route::post('/master-subkategori-mcu/hapus-terpilih', [MasterBulkDeleteController::class, 'subcategories'])->name('mcu-subcategory.bulk-destroy');
         Route::resource('master-subkategori-mcu', McuSubcategoryController::class)->names('mcu-subcategory')->parameters(['master-subkategori-mcu' => 'subcategory'])->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
         Route::put('/master-kategori-mcu/{category}/urutan-item', [McuItemOrderController::class, 'update'])->name('mcu-item-order.update');
         Route::post('/master-item-mcu/hapus-terpilih', [MasterBulkDeleteController::class, 'items'])->name('mcu-item.bulk-destroy');
@@ -91,6 +95,7 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/pemeriksaan', [PemeriksaanController::class, 'edit'])->name('pemeriksaan.edit');
         Route::get('/{kunjungan}/peserta/{peserta}/pemeriksaan', [PemeriksaanController::class, 'edit'])->whereUuid(['kunjungan', 'peserta'])->name('pemeriksaan.scan');
         Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/checkpoint', [PemeriksaanController::class, 'checkpoint'])->name('pemeriksaan.checkpoint');
+        Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/label', [PemeriksaanController::class, 'labels'])->name('pemeriksaan.labels');
         Route::put('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/pemeriksaan', [PemeriksaanController::class, 'update'])->name('pemeriksaan.update');
         Route::post('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/finalisasi', [PemeriksaanController::class, 'finalize'])->name('pemeriksaan.finalize');
         Route::post('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/revisi', [PemeriksaanController::class, 'revise'])->name('pemeriksaan.revise');

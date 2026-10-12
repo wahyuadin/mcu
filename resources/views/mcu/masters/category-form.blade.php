@@ -16,6 +16,7 @@
         <p class="text-xs text-slate-500">YA menampilkan pilihan Dokter Pemeriksa pada kategori pemeriksaan pasien. Pengaturan paket dan hasil lama tidak berubah.</p>
         @error('has_responsible_doctor')<p class="text-sm text-red-700">{{ $message }}</p>@enderror
     </fieldset>
+    @include('mcu.masters.category-label-settings')
     <div class="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4"><div><h3 class="text-sm font-semibold">Urutan tampil</h3><p class="mt-1 text-xs text-slate-500">Susun kartu kategori tanpa mengubah angka satu per satu. Kategori baru ditambahkan di akhir setelah disimpan.</p></div><button type="button" data-item-order-open data-order-category="all" aria-haspopup="dialog" aria-controls="item-order-modal" class="justify-self-start rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-[#00008B]">Atur urutan kategori</button></div>
     @include('mcu.field', ['field' => 'is_active', 'label' => 'Status', 'type' => 'select', 'value' => $category->is_active ? '1' : '0', 'options' => ['1' => 'Aktif', '0' => 'Nonaktif']])
     <p class="text-sm text-slate-500">Nonaktif menyembunyikan kategori dari pilihan paket baru, bukan menghapusnya dari paket dan hasil lama.</p>

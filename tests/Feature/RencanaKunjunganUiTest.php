@@ -14,6 +14,19 @@ class RencanaKunjunganUiTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_planning_list_shows_company_logo_beside_name_and_default_icon_when_no_logo_is_registered(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+        $company = Perusahaan::factory()->create(['nama_perusahaan' => 'PT. Toyota Manufacturing', 'logo_path' => 'perusahaan/toyota.webp']);
+        RencanaKunjungan::factory()->create(['perusahaan_id' => $company->id]);
+        RencanaKunjungan::factory()->create(['perusahaan_id' => Perusahaan::factory()->create(['logo_path' => null])->id]);
+
+        $this->get(route('rencana-kunjungan.index'))->assertOk()
+            ->assertSee('src="'.route('perusahaan.logo', $company).'"', false)
+            ->assertSee('alt="Logo PT. Toyota Manufacturing"', false)
+            ->assertSee('data-company-default-icon', false);
+    }
+
     public function test_new_plan_defaults_to_today_and_fourteen_days_later_without_quota_input(): void
     {
         $this->travelTo(now()->setDate(2026, 12, 25)->startOfDay());

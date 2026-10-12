@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Karyawan;
 use App\Models\McuCategory;
 use App\Models\McuItem;
+use App\Models\McuSubcategory;
 use App\Models\Paket;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -15,6 +16,31 @@ use Tests\TestCase;
 class MasterBulkDeleteTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_subcategory_bulk_deletion_skips_used_and_missing_rows_and_preserves_filters_and_snapshots(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+        $empty = McuSubcategory::factory()->create(['name' => 'Kosong']);
+        $used = McuSubcategory::factory()->create(['name' => 'Hematologi']);
+        $unselected = McuSubcategory::factory()->create();
+        $item = McuItem::factory()->create(['mcu_category_id' => $used->mcu_category_id, 'mcu_subcategory_id' => $used->id]);
+        $schema = [['id' => $used->mcu_category_id, 'name' => $used->category->name, 'order' => 0, 'items' => [$item->definition()]]];
+        $package = Paket::factory()->master()->create(['dynamic_schema' => $schema]);
+        $filters = ['q' => 'Hema', 'category' => $used->mcu_category_id, 'page' => 2];
+
+        $this->post(route('mcu-subcategory.bulk-destroy'), ['ids' => [$empty->id, $used->id, (string) Str::uuid()]] + $filters)
+            ->assertRedirect(route('mcu-subcategory.index', $filters))
+            ->assertSessionHas('bulkDeleteResults', fn (array $results): bool => count($results) === 3 && $results[0]['name'] === 'Kosong' && $results[0]['deleted'] && $results[1]['name'] === 'Hematologi' && ! $results[1]['deleted'] && ! $results[2]['deleted']);
+
+        $this->assertDatabaseMissing('mcu_subcategories', ['id' => $empty->id]);
+        $this->assertModelExists($used);
+        $this->assertModelExists($unselected);
+        $this->assertModelExists($item);
+        $this->assertSame($schema, $package->fresh()->dynamic_schema);
+        $this->get(route('mcu-subcategory.index'))->assertOk()->assertSee('Rincian penghapusan')->assertSee('Subkategori masih memiliki item');
+        $this->post(route('mcu-subcategory.bulk-destroy'), ['ids' => [$empty->id]])
+            ->assertSessionHas('bulkDeleteResults', fn (array $results): bool => ! $results[0]['deleted']);
+    }
 
     public function test_package_bulk_deletion_only_removes_selected_unused_packages_and_reports_protected_rows(): void
     {
@@ -79,8 +105,10 @@ class MasterBulkDeleteTest extends TestCase
         $otherCategory = McuCategory::factory()->create(['name' => 'Tidak cocok']);
         McuItem::factory()->count(31)->create(['mcu_category_id' => $otherCategory->id]);
         $otherItem = McuItem::factory()->create();
+        McuSubcategory::factory()->count(31)->create(['mcu_category_id' => $otherCategory->id, 'name' => 'Subkategori Cocok']);
+        $otherSubcategory = McuSubcategory::factory()->create(['name' => 'Tidak cocok']);
 
-        foreach ([['paket.index', ['q' => 'Paket Cocok'], 20, $otherPackage->id], ['mcu-category.index', ['q' => 'Kategori Cocok'], 30, $otherCategory->id], ['mcu-item.index', ['category' => $otherCategory->id], 30, $otherItem->id]] as [$route, $filters, $expected, $excluded]) {
+        foreach ([['paket.index', ['q' => 'Paket Cocok'], 20, $otherPackage->id], ['mcu-category.index', ['q' => 'Kategori Cocok'], 30, $otherCategory->id], ['mcu-item.index', ['category' => $otherCategory->id], 30, $otherItem->id], ['mcu-subcategory.index', ['category' => $otherCategory->id, 'q' => 'Subkategori Cocok'], 30, $otherSubcategory->id]] as [$route, $filters, $expected, $excluded]) {
             $response = $this->get(route($route, $filters))->assertOk()->assertSee('Pilih semua')->assertSee('Hapus terpilih')->assertSee('form="master-bulk-delete"', false)->assertDontSee('value="'.$excluded.'"', false);
             $this->assertSame($expected, substr_count($response->getContent(), 'data-bulk-delete-row'));
             $secondPage = $this->get(route($route, [...$filters, 'page' => 2]))->assertOk();
@@ -93,7 +121,7 @@ class MasterBulkDeleteTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin']));
         $package = Paket::factory()->master()->create();
         $item = McuItem::factory()->create();
-        foreach (['paket.bulk-destroy', 'mcu-category.bulk-destroy', 'mcu-item.bulk-destroy'] as $route) {
+        foreach (['paket.bulk-destroy', 'mcu-category.bulk-destroy', 'mcu-item.bulk-destroy', 'mcu-subcategory.bulk-destroy'] as $route) {
             foreach ([[], ['ids' => []], ['ids' => ['not-uuid']], ['ids' => [$package->id, $package->id]], ['ids' => array_fill(0, 31, $package->id)], ['ids' => ['key' => $package->id]]] as $payload) {
                 $this->postJson(route($route), $payload)->assertUnprocessable();
             }
@@ -107,12 +135,12 @@ class MasterBulkDeleteTest extends TestCase
     {
         $package = Paket::factory()->master()->create();
         $item = McuItem::factory()->create();
-        foreach (['paket.bulk-destroy', 'mcu-category.bulk-destroy', 'mcu-item.bulk-destroy'] as $route) {
+        foreach (['paket.bulk-destroy', 'mcu-category.bulk-destroy', 'mcu-item.bulk-destroy', 'mcu-subcategory.bulk-destroy'] as $route) {
             $this->post(route($route), ['ids' => [$package->id]])->assertRedirect(route('login'));
         }
         foreach (['petugas', 'dokter'] as $role) {
             $this->actingAs(User::factory()->create(['role' => $role]));
-            foreach (['paket.bulk-destroy', 'mcu-category.bulk-destroy', 'mcu-item.bulk-destroy'] as $route) {
+            foreach (['paket.bulk-destroy', 'mcu-category.bulk-destroy', 'mcu-item.bulk-destroy', 'mcu-subcategory.bulk-destroy'] as $route) {
                 $this->post(route($route), ['ids' => [$package->id]])->assertForbidden();
             }
         }
