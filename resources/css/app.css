@@ -81,6 +81,48 @@
     display: none !important;
 }
 
+[data-visit-action] {
+    touch-action: manipulation;
+    transition:
+        transform 140ms var(--ease-out),
+        opacity 140ms var(--ease-out);
+}
+
+[data-visit-action]:not(:disabled):active {
+    transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    [data-visit-action]:not(:disabled):active {
+        transform: none;
+        opacity: 0.85;
+    }
+}
+
+[data-anamnesa-confirm]::backdrop {
+    background: rgb(15 23 42 / 60%);
+    opacity: 1;
+    transition: opacity 220ms var(--ease-out);
+}
+
+[data-anamnesa-confirm][data-confirm-closing]::backdrop {
+    opacity: 0;
+    transition-duration: 200ms;
+}
+
+@starting-style {
+    [data-anamnesa-confirm][open]::backdrop {
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    [data-anamnesa-confirm]::backdrop,
+    [data-anamnesa-confirm][data-confirm-closing]::backdrop {
+        transition-duration: 125ms;
+    }
+}
+
 [data-item-order-modal]::backdrop,
 [data-patient-import-modal]::backdrop {
     background: rgb(15 23 42 / 60%);

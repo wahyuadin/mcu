@@ -32,6 +32,25 @@ test('pages without a master form are unaffected', () => {
     assert.doesNotThrow(() => runInNewContext(source.replace(/^export /gm, ''), { document: { querySelectorAll: () => [] } }));
 });
 
+test('optional attachment control is available only for text and number answers', () => {
+    const type = { value: 'text', addEventListener(name, callback) { this.change = callback; } };
+    const attachment = {};
+    const mapping = { querySelectorAll: () => [] };
+    const hint = {};
+    const card = { querySelector: (selector) => ({ '[data-question-field="input_type"]': type, '[data-radio-mapping]': mapping, '[data-answer-hint]': hint, '[data-attachment-option]': attachment })[selector] };
+    const context = { document: { querySelectorAll: () => [] } };
+    runInNewContext(source.replace(/^export /gm, ''), context);
+    context.configureQuestionCard(card);
+    assert.equal(attachment.hidden, false);
+    assert.equal(attachment.disabled, false);
+    type.value = 'radio'; type.change();
+    assert.equal(attachment.hidden, true);
+    assert.equal(attachment.disabled, true);
+    type.value = 'number'; type.change();
+    assert.equal(attachment.hidden, false);
+    assert.equal(attachment.disabled, false);
+});
+
 test('laboratory editor requires only the bounds relevant to the selected result and rule', () => {
     const field = (value = '') => ({ value, events: {}, label: {}, addEventListener(event, callback) { this.events[event] = callback; }, closest() { return this.label; }, removeAttribute(name) { delete this[name]; } });
     const fields = Object.fromEntries(['lab_default_result', 'lab_rule', 'lab_min', 'lab_max', 'lab_normal_values', 'lab_reference'].map((name) => [name, field()]));

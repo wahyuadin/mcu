@@ -15,11 +15,13 @@ class McuCategory extends Model implements Auditable
     /** @use HasFactory<McuCategoryFactory> */
     use AuditableTrait, HasFactory, HasUuids;
 
-    protected $fillable = ['name', 'sort_order', 'is_active'];
+    protected $fillable = ['name', 'sort_order', 'is_active', 'has_responsible_doctor'];
+
+    protected $attributes = ['has_responsible_doctor' => true];
 
     protected function casts(): array
     {
-        return ['sort_order' => 'integer', 'is_active' => 'boolean'];
+        return ['sort_order' => 'integer', 'is_active' => 'boolean', 'has_responsible_doctor' => 'boolean'];
     }
 
     public function items(): HasMany

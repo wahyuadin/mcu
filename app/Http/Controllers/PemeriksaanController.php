@@ -8,6 +8,7 @@ use App\Models\Dokter;
 use App\Models\Karyawan;
 use App\Models\Paket;
 use App\Models\RencanaKunjungan;
+use App\ParticipantAnamnesaForm;
 use App\PatientPhoto;
 use Endroid\QrCode\ErrorCorrectionLevel;
 use Endroid\QrCode\QrCode;
@@ -15,6 +16,7 @@ use Endroid\QrCode\Writer\SvgWriter;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -35,7 +37,7 @@ class PemeriksaanController extends Controller
         if (! $readonly && (! $peserta->hasStoredPhoto() || $request->query('tab') === 'foto')) {
             return view('mcu.pemeriksaan-foto', ['kunjungan' => $kunjungan, 'peserta' => $peserta, 'hasPhoto' => $peserta->hasStoredPhoto()]);
         }
-        $selectedDoctors = array_filter([$exam->dokter_id, $exam->dokter_fisik_id, ...array_column($exam->penunjang ?? [], 'doctor_id')]);
+        $selectedDoctors = array_filter([$exam->dokter_id, $exam->dokter_fisik_id, ...array_column($exam->penunjang ?? [], 'doctor_id'), ...array_values($exam->category_doctors ?? [])]);
         $categoryGroups = $exam->categoryGroups($peserta);
         if ($request->query('tab') === 'dinamis') {
             return redirect()->route('pemeriksaan.edit', [$kunjungan, $peserta, 'tab' => array_key_first($categoryGroups) ?? 'ringkasan']);
@@ -79,6 +81,7 @@ class PemeriksaanController extends Controller
         return view('mcu.pemeriksaan', [
             'kunjungan' => $kunjungan, 'peserta' => $peserta, 'exam' => $exam, 'tabs' => $tabs,
             'categoryGroups' => $categoryGroups,
+            'reviewSubmission' => $request->boolean('review_submission') && $tab === 'anamnesa' && ! $readonly && $peserta->anamnesa_submission && ! ($peserta->anamnesa_submission['reviewed_at'] ?? null),
             'tab' => is_string($tab) && array_key_exists($tab, $tabs) ? $tab : 'ringkasan',
             'progress' => $progress, 'finalizationErrors' => $exam->finalizationErrors($peserta),
             'examinations' => $examinations, 'completedExaminations' => $completion['completed'],
@@ -143,66 +146,87 @@ class PemeriksaanController extends Controller
             'section' => ['sometimes', Rule::in(['identitas', 'anamnesa', 'fisik', 'laboratorium', 'penunjang', 'dinamis', 'kesimpulan', ...array_keys($exam->categoryGroups($peserta))])],
             'status' => ['required', Rule::in(['draft', 'selesai', 'final'])],
             'lock_version' => [Rule::requiredIf($request->filled('section')), 'integer', 'min:0'],
+            'dynamic_files' => in_array($request->input('section'), ['dinamis', 'laboratorium', ...array_keys($exam->categoryGroups($peserta))], true) ? ['sometimes', 'array'] : ['prohibited'],
+            'category_doctors' => array_key_exists($request->input('section', ''), $exam->categoryGroups($peserta)) ? ['sometimes', 'array'] : ['prohibited'],
         ]);
         $section = $request->input('section');
-        DB::transaction(function () use ($request, $kunjungan, $peserta, $section): void {
-            $this->lockEditable($kunjungan, $peserta);
-            $this->requirePhoto($peserta);
-            $exam = $peserta->anamnesa()->first() ?? new Anamnesa(['karyawan_id' => $peserta->id, 'rencana_kunjungan_id' => $kunjungan->id]);
-            abort_if($exam->status === 'final', 403, 'Hasil final hanya dapat diubah melalui revisi.');
-            if ($section !== null && (int) $request->input('lock_version', -1) !== (int) ($exam->lock_version ?? 0)) {
-                throw ValidationException::withMessages(['pemeriksaan' => 'Data berubah di sesi lain. Muat ulang halaman sebelum menyimpan.']);
-            }
-            $exam->package_items ??= $peserta->paket->active_items ?? [];
-            $exam->dynamic_schema ??= $exam->dynamicGroups($peserta);
-            if ($section === 'identitas') {
-                $data = $request->validate([
-                    'tanggal_mcu' => ['nullable', 'date'], 'nip' => ['nullable', 'string', 'max:50'],
-                    'bagian' => ['nullable', 'string', 'max:255'], 'jabatan' => ['nullable', 'string', 'max:255'],
-                ]);
-                $peserta->update($data);
-            } elseif ($section === 'anamnesa') {
-                $this->saveHistory($request, $peserta, $exam);
-            } elseif ($section === 'fisik') {
-                $this->savePhysical($request, $peserta, $exam);
-            } elseif ($section === 'laboratorium') {
-                $this->saveLaboratory($request, $peserta, $exam);
-            } elseif ($section === 'penunjang') {
-                $this->saveSupporting($request, $peserta, $exam);
-            } elseif ($section === 'kesimpulan') {
-                $exam->fill($request->validate([
-                    'catatan_dokter' => ['nullable', 'string', 'max:5000'], 'anjuran_saran' => ['nullable', 'string', 'max:5000'],
-                    'status_kelaikan' => ['nullable', Rule::in(['Fit to Work', 'Fit with Note', 'Temporarily Unfit', 'Unfit'])],
-                    'dokter_id' => ['nullable', $this->doctorRule($exam->dokter_id)],
-                ]));
-            } elseif ($section === 'dinamis' || ($section !== null && str_starts_with($section, 'kategori-'))) {
-                $this->saveDynamic($request, $peserta, $exam, $section);
-            } else {
-                $this->saveLegacy($request, $peserta, $exam);
-            }
-            if ($section && $section !== 'identitas') {
-                $states = $exam->section_status ?? [];
-                $states[$section] = $request->input('status') === 'selesai' ? 'selesai' : 'draft';
-                $exam->section_status = $states;
-                if ($request->input('status') === 'selesai') {
-                    $missing = (str_starts_with($section, 'kategori-') ? $exam->categoryProgress($peserta) : $exam->progress($peserta))[$section]['missing'];
-                    if ($missing !== []) {
-                        throw ValidationException::withMessages(['kelengkapan' => 'Bagian belum lengkap: '.implode(', ', $missing)]);
+        $storedAttachments = [];
+        try {
+            DB::transaction(function () use ($request, $kunjungan, $peserta, $section, &$storedAttachments): void {
+                $this->lockEditable($kunjungan, $peserta);
+                $this->requirePhoto($peserta);
+                $exam = $peserta->anamnesa()->first() ?? new Anamnesa(['karyawan_id' => $peserta->id, 'rencana_kunjungan_id' => $kunjungan->id]);
+                abort_if($exam->status === 'final', 403, 'Hasil final hanya dapat diubah melalui revisi.');
+                if ($section !== null && (int) $request->input('lock_version', -1) !== (int) ($exam->lock_version ?? 0)) {
+                    throw ValidationException::withMessages(['pemeriksaan' => 'Data berubah di sesi lain. Muat ulang halaman sebelum menyimpan.']);
+                }
+                $exam->package_items ??= $peserta->paket->active_items ?? [];
+                $exam->dynamic_schema ??= $exam->dynamicGroups($peserta);
+                if ($section === 'identitas') {
+                    $data = $request->validate([
+                        'tanggal_mcu' => ['nullable', 'date'], 'nip' => ['nullable', 'string', 'max:50'],
+                        'bagian' => ['nullable', 'string', 'max:255'], 'jabatan' => ['nullable', 'string', 'max:255'],
+                    ]);
+                    $peserta->update($data);
+                } elseif ($section === 'anamnesa') {
+                    if ($request->filled('submission_id')) {
+                        $submission = $peserta->anamnesa_submission;
+                        if (! $submission || ($submission['reviewed_at'] ?? null) || ! hash_equals($submission['id'], (string) $request->input('submission_id')) || $submission['groups'] !== ParticipantAnamnesaForm::groups($peserta)) {
+                            throw ValidationException::withMessages(['pemeriksaan' => 'Jawaban peserta atau paket berubah. Muat ulang dan tinjau kembali.']);
+                        }
+                        $submission['reviewed_at'] = now()->toIso8601String();
+                        $submission['reviewed_by'] = $request->user()->id;
+                        $peserta->anamnesa_submission = $submission;
+                        $peserta->save();
+                    }
+                    $this->saveHistory($request, $peserta, $exam);
+                } elseif ($section === 'fisik') {
+                    $this->savePhysical($request, $peserta, $exam);
+                } elseif ($section === 'laboratorium') {
+                    $this->saveLaboratory($request, $peserta, $exam, $storedAttachments);
+                } elseif ($section === 'penunjang') {
+                    $this->saveSupporting($request, $peserta, $exam);
+                } elseif ($section === 'kesimpulan') {
+                    $exam->fill($request->validate([
+                        'catatan_dokter' => ['nullable', 'string', 'max:5000'], 'anjuran_saran' => ['nullable', 'string', 'max:5000'],
+                        'status_kelaikan' => ['nullable', Rule::in(['Fit to Work', 'Fit with Note', 'Temporarily Unfit', 'Unfit'])],
+                        'dokter_id' => ['nullable', $this->doctorRule($exam->dokter_id)],
+                    ]));
+                } elseif ($section === 'dinamis' || ($section !== null && str_starts_with($section, 'kategori-'))) {
+                    $this->saveDynamic($request, $peserta, $exam, $section, $storedAttachments);
+                } else {
+                    $this->saveLegacy($request, $peserta, $exam);
+                }
+                if ($section && $section !== 'identitas') {
+                    $states = $exam->section_status ?? [];
+                    $states[$section] = $request->input('status') === 'selesai' ? 'selesai' : 'draft';
+                    $exam->section_status = $states;
+                    if ($request->input('status') === 'selesai') {
+                        $missing = (str_starts_with($section, 'kategori-') ? $exam->categoryProgress($peserta) : $exam->progress($peserta))[$section]['missing'];
+                        if ($missing !== []) {
+                            throw ValidationException::withMessages(['kelengkapan' => 'Bagian belum lengkap: '.implode(', ', $missing)]);
+                        }
                     }
                 }
+                if ($request->input('status') === 'final') {
+                    $this->validateFinalization($request, $peserta, $exam);
+                    $exam->finalized_at = now();
+                    $exam->finalized_by = $request->user()->id;
+                    $exam->status = 'final';
+                } else {
+                    $exam->status = 'draft';
+                }
+                $exam->lock_version = ($exam->lock_version ?? 0) + 1;
+                $exam->save();
+                $peserta->update(['status_pemeriksaan' => $exam->status === 'final' ? 'selesai' : ($exam->finalizationErrors($peserta) === [] ? 'siap_finalisasi' : 'proses')]);
+            });
+
+        } catch (\Throwable $exception) {
+            foreach ($storedAttachments as $path) {
+                Storage::disk('local')->delete($path);
             }
-            if ($request->input('status') === 'final') {
-                $this->validateFinalization($request, $peserta, $exam);
-                $exam->finalized_at = now();
-                $exam->finalized_by = $request->user()->id;
-                $exam->status = 'final';
-            } else {
-                $exam->status = 'draft';
-            }
-            $exam->lock_version = ($exam->lock_version ?? 0) + 1;
-            $exam->save();
-            $peserta->update(['status_pemeriksaan' => $exam->status === 'final' ? 'selesai' : ($exam->finalizationErrors($peserta) === [] ? 'siap_finalisasi' : 'proses')]);
-        });
+            throw $exception;
+        }
 
         return redirect()->route('pemeriksaan.edit', [$kunjungan, $peserta, 'tab' => $section === 'dinamis' ? 'review' : ($section ?? 'review')])->with('success', 'Hasil pemeriksaan tersimpan.');
     }
@@ -248,9 +272,35 @@ class PemeriksaanController extends Controller
         return back()->with('success', 'Revisi dibuka. Hasil sebelumnya disimpan dalam riwayat revisi.');
     }
 
-    public function attachment(RencanaKunjungan $kunjungan, Karyawan $peserta, string $item): StreamedResponse
+    public function attachment(Request $request, RencanaKunjungan $kunjungan, Karyawan $peserta, string $item): StreamedResponse
     {
         $this->assertParticipant($kunjungan, $peserta);
+        if (str_starts_with($item, 'dynamic-')) {
+            $id = substr($item, 8);
+            $exam = $peserta->anamnesa;
+            abort_unless($exam, 404);
+            $schema = $exam->dynamic_schema ?? [];
+            $attachments = $exam->dynamic_attachments ?? [];
+            if ($request->has('version')) {
+                $data = $request->validate(['version' => ['required', 'integer', 'min:1']]);
+                $revision = ($exam->revisions ?? [])[$data['version'] - 1]['snapshot'] ?? null;
+                abort_unless($revision, 404);
+                $schema = $revision['dynamic_schema'] ?? [];
+                $attachments = $revision['dynamic_attachments'] ?? [];
+            }
+            $definition = collect($schema)->pluck('items')->flatten(1)->first(fn (array $definition): bool => $definition['id'] === $id);
+            abort_unless($definition && ($definition['allow_attachment'] ?? false) && in_array($definition['type'], ['text', 'number', 'laboratory'], true), 404);
+            $attachment = $attachments[$id] ?? null;
+            $path = $attachment['path'] ?? null;
+            abort_unless($path && str_starts_with($path, 'mcu/'.$peserta->id.'/dynamic/') && Storage::disk('local')->exists($path), 404);
+            $headers = ['Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff'];
+            if (($attachment['mime'] ?? null) === 'application/pdf') {
+                return Storage::disk('local')->download($path, 'lampiran-'.$id.'.pdf', $headers + ['Content-Type' => 'application/pdf']);
+            }
+            abort_unless(in_array($attachment['mime'] ?? null, ['image/jpeg', 'image/png', 'image/webp'], true), 404);
+
+            return Storage::disk('local')->response($path, null, $headers + ['Content-Type' => $attachment['mime']]);
+        }
         abort_unless($item === 'foto' || array_key_exists($item, McuCatalog::supporting()), 404);
         $path = $item === 'foto' ? $peserta->foto : ($peserta->anamnesa?->penunjang[$item]['attachment'] ?? null);
         abort_unless($path && str_starts_with($path, 'mcu/'.$peserta->id.'/') && Storage::disk('local')->exists($path), 404);
@@ -283,7 +333,8 @@ class PemeriksaanController extends Controller
         $exam->anamnesa_data = array_replace($exam->anamnesa_data ?? [], $data['anamnesa'] ?? []);
     }
 
-    private function saveDynamic(Request $request, Karyawan $participant, Anamnesa $exam, string $section = 'dinamis'): void
+    /** @param list<string> $storedAttachments */
+    private function saveDynamic(Request $request, Karyawan $participant, Anamnesa $exam, string $section, array &$storedAttachments): void
     {
         if (str_starts_with($section, 'kategori-')) {
             $groups = $exam->categoryGroups($participant);
@@ -296,6 +347,21 @@ class PemeriksaanController extends Controller
         }
         $definitions = collect($groups)->pluck('items')->flatten(1)->filter(fn (array $item): bool => $item['type'] !== 'label')->keyBy('id');
         $rules = ['dynamic_answers' => $definitions->isEmpty() ? ['sometimes', 'array', 'size:0'] : ['sometimes', 'array:'.implode(',', $definitions->keys()->all())]];
+        $doctorCategories = collect($groups)->filter(fn (array $group): bool => $group['has_responsible_doctor'] ?? true)->keyBy('id');
+        $rules['category_doctors'] = $doctorCategories->isEmpty() ? ['prohibited'] : ['sometimes', 'array:'.implode(',', $doctorCategories->keys()->all())];
+        foreach ($doctorCategories as $id => $group) {
+            $rules['category_doctors.'.$id] = ['nullable', 'string', $this->doctorRule(($exam->category_doctors ?? [])[$id] ?? null)];
+        }
+        $uploadable = $definitions->filter(fn (array $item): bool => ($item['allow_attachment'] ?? false) && in_array($item['type'], ['text', 'number', 'laboratory'], true));
+        $rules['dynamic_files'] = $uploadable->isEmpty() ? ['sometimes', 'array', 'size:0'] : ['sometimes', 'array:'.implode(',', $uploadable->keys()->all())];
+        foreach ($uploadable as $id => $item) {
+            $file = $request->file('dynamic_files.'.$id);
+            $rules['dynamic_files.'.$id] = ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'extensions:jpg,jpeg,png,webp,pdf', 'max:10240'];
+            if ($file instanceof UploadedFile && $file->getMimeType() !== 'application/pdf') {
+                $rules['dynamic_files.'.$id][] = 'image';
+                $rules['dynamic_files.'.$id][] = 'dimensions:min_width=1,min_height=1';
+            }
+        }
         foreach ($definitions as $id => $item) {
             $rules['dynamic_answers.'.$id] = match ($item['type']) {
                 'radio' => ['nullable', Rule::in(['YA', 'TIDAK'])],
@@ -306,6 +372,21 @@ class PemeriksaanController extends Controller
         }
         $data = $request->validate($rules);
         $exam->dynamic_answers = array_replace($exam->dynamic_answers ?? [], $data['dynamic_answers'] ?? []);
+        $exam->category_doctors = array_replace($exam->category_doctors ?? [], $data['category_doctors'] ?? []);
+        $attachments = $exam->dynamic_attachments ?? [];
+        foreach ($uploadable as $id => $item) {
+            if (! $request->hasFile('dynamic_files.'.$id)) {
+                continue;
+            }
+            $file = $request->file('dynamic_files.'.$id);
+            $path = $file->store('mcu/'.$participant->id.'/dynamic', 'local');
+            if (! $path) {
+                throw ValidationException::withMessages(['dynamic_files.'.$id => 'Lampiran gagal disimpan. Silakan coba kembali.']);
+            }
+            $storedAttachments[] = $path;
+            $attachments[$id] = ['path' => $path, 'mime' => $file->getMimeType()];
+        }
+        $exam->dynamic_attachments = $attachments;
     }
 
     private function savePhysical(Request $request, Karyawan $participant, Anamnesa $exam): void
@@ -334,9 +415,10 @@ class PemeriksaanController extends Controller
         }
     }
 
-    private function saveLaboratory(Request $request, Karyawan $participant, Anamnesa $exam): void
+    /** @param list<string> $storedAttachments */
+    private function saveLaboratory(Request $request, Karyawan $participant, Anamnesa $exam, array &$storedAttachments): void
     {
-        $this->saveDynamic($request, $participant, $exam, 'laboratorium');
+        $this->saveDynamic($request, $participant, $exam, 'laboratorium', $storedAttachments);
         $rules = [];
         foreach (McuCatalog::laboratory() as $items) {
             foreach ($items as $key => $item) {

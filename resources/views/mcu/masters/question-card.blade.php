@@ -27,6 +27,10 @@
         <p class="text-xs text-slate-500">Pada Isian teks/angka, isi nilai normal untuk menggunakan format Hasil, Unit, Nilai Normal, dan Keterangan. Kosongkan nilai normal jika hanya membutuhkan isian biasa. Status dihitung dari aturan, bukan dari teks rujukan. Keterangan boleh kosong. Hasil kosong tidak dianggap normal.</p>
     </fieldset>
     <div data-answer-hint hidden class="mt-5 border-b border-dashed border-slate-300 pb-3 text-sm text-slate-400">Jawaban petugas</div>
+    <fieldset data-attachment-option class="mt-5 grid gap-3 rounded-xl border border-slate-200 p-4">
+        <label class="flex items-start gap-3 text-sm font-semibold"><input type="hidden" name="questions[{{ $index }}][allow_attachment]" value="0"><input data-question-field="allow_attachment" type="checkbox" name="questions[{{ $index }}][allow_attachment]" value="1" @checked($question['allow_attachment'] ?? false) class="mt-0.5 h-5 w-5 shrink-0 accent-blue-900"><span>Izinkan lampiran (opsional)</span></label>
+        <p class="text-xs leading-5 text-slate-500">Petugas dapat melampirkan gambar hasil atau PDF per pasien. JPG, PNG, WebP, PDF · maksimal 10 MB. Lampiran tidak wajib dan tidak menggantikan isian hasil.</p>
+    </fieldset>
     <div class="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-4">
         <div class="flex gap-3"><button type="button" data-question-duplicate class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">Duplikasi</button><button type="button" data-question-remove @if($primary) hidden @endif class="rounded-lg px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50">Hapus kartu</button></div>
         <div class="flex flex-wrap items-center gap-5">

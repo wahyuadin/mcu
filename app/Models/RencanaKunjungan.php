@@ -18,6 +18,10 @@ class RencanaKunjungan extends Model implements Auditable
 
     protected $table = 'rencana_kunjungans';
 
+    protected $hidden = ['anamnesa_token', 'anamnesa_token_hash'];
+
+    protected $auditExclude = ['anamnesa_token', 'anamnesa_token_hash'];
+
     protected $fillable = [
         'perusahaan_id',
         'nomor_kunjungan',
@@ -33,6 +37,7 @@ class RencanaKunjungan extends Model implements Auditable
     protected function casts(): array
     {
         return [
+            'anamnesa_token' => 'encrypted',
             'tgl_mulai' => 'date',
             'tgl_selesai' => 'date',
             'kuota_peserta' => 'integer',

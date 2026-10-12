@@ -20,7 +20,7 @@ class Anamnesa extends Model implements Auditable
 
     protected $fillable = [
         'anamnesa_data', 'laboratorium', 'penunjang', 'section_status', 'revisions', 'package_items',
-        'dynamic_schema', 'dynamic_answers',
+        'dynamic_schema', 'dynamic_answers', 'dynamic_attachments', 'category_doctors',
         'dokter_fisik_id', 'finalized_at', 'finalized_by', 'lock_version',
         'karyawan_id',
         'rencana_kunjungan_id',
@@ -86,7 +86,7 @@ class Anamnesa extends Model implements Auditable
         return [
             'anamnesa_data' => 'array', 'laboratorium' => 'array', 'penunjang' => 'array',
             'section_status' => 'array', 'revisions' => 'array', 'package_items' => 'array',
-            'dynamic_schema' => 'array', 'dynamic_answers' => 'array',
+            'dynamic_schema' => 'array', 'dynamic_answers' => 'array', 'dynamic_attachments' => 'array', 'category_doctors' => 'array',
             'finalized_at' => 'datetime', 'lock_version' => 'integer',
             'riwayat_penyakit_dahulu' => 'array',
             'riwayat_penyakit_keluarga' => 'array',

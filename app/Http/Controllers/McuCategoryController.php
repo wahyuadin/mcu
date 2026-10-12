@@ -64,9 +64,9 @@ class McuCategoryController extends Controller
         return redirect()->route('mcu-category.index')->with('success', 'Kategori dihapus. Paket dan hasil pemeriksaan tersimpan tidak berubah.');
     }
 
-    /** @return array{name: string, sort_order?: int, is_active: bool} */
+    /** @return array{name: string, sort_order?: int, is_active: bool, has_responsible_doctor?: bool} */
     private function validated(Request $request): array
     {
-        return $request->validate(['name' => ['required', 'string', 'max:255'], 'sort_order' => ['sometimes', 'integer', 'min:0', 'max:9999'], 'is_active' => ['required', 'boolean']]);
+        return $request->validate(['name' => ['required', 'string', 'max:255'], 'sort_order' => ['sometimes', 'integer', 'min:0', 'max:9999'], 'is_active' => ['required', 'boolean'], 'has_responsible_doctor' => ['sometimes', 'required', 'boolean']]);
     }
 }

@@ -146,7 +146,8 @@ class NavigationAndDokterTest extends TestCase
     public function test_sidebar_has_logo_and_doctor_master_link_without_mcu_label_or_live_badge(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
-        $this->get(route('dokter.index'))->assertOk()->assertSee('alt="Nayaka"', false)->assertDontSee('>MCU</span>', false)
-            ->assertSee('Master data')->assertSee('href="'.route('dokter.index').'"', false)->assertDontSee('LIVE');
+        $response = $this->get(route('dokter.index'))->assertOk()->assertSee('alt="Nayaka"', false)->assertDontSee('>MCU</span>', false)
+            ->assertSee('href="'.route('dokter.index').'"', false)->assertDontSee('LIVE');
+        $this->assertMatchesRegularExpression('/Master\s+data/', $response->getContent());
     }
 }

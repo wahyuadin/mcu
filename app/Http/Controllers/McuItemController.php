@@ -108,6 +108,7 @@ class McuItemController extends Controller
                 $prefix.'no_report' => ['exclude_unless:'.$prefix.'input_type,radio', 'required', 'string', 'max:2000'],
                 $prefix.'help_text' => ['nullable', 'string', 'max:2000'], $prefix.'is_required' => ['required', 'boolean'],
                 $prefix.'is_active' => ['required', 'boolean'], $prefix.'sort_order' => ['sometimes', 'integer', 'min:0', 'max:9999'],
+                $prefix.'allow_attachment' => ['sometimes', 'boolean'],
             ];
             $inputType = $request->input($prefix.'input_type');
             $configured = in_array($inputType, ['text', 'number'], true) && ($request->filled($prefix.'lab_reference') || $request->filled($prefix.'lab_default_result'));
@@ -127,6 +128,7 @@ class McuItemController extends Controller
         $validated = $request->validate($rules);
         $questions = $request->has('questions') ? $validated['questions'] : [$validated];
         foreach ($questions as $index => &$question) {
+            $question['allow_attachment'] = in_array($question['input_type'], ['text', 'number'], true) && (bool) ($question['allow_attachment'] ?? false);
             if ($question['input_type'] !== 'radio') {
                 $question['yes_report'] = $question['no_report'] = null;
             }

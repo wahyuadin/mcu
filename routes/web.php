@@ -15,9 +15,17 @@ use App\Http\Controllers\PaketController;
 use App\Http\Controllers\PasienController;
 use App\Http\Controllers\PatientImportController;
 use App\Http\Controllers\PemeriksaanController;
+use App\Http\Controllers\PublicAnamnesaController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
+Route::prefix('anamnesa/{token}')->where(['token' => '[a-f0-9]{64}'])->middleware('throttle:60,1,public-anamnesa')->group(function (): void {
+    Route::get('/', [PublicAnamnesaController::class, 'show'])->name('anamnesa.public');
+    Route::post('/identifikasi', [PublicAnamnesaController::class, 'identify'])->middleware('throttle:5,1,anamnesa-identify')->name('anamnesa.identify');
+    Route::post('/kirim', [PublicAnamnesaController::class, 'submit'])->middleware('throttle:10,1,anamnesa-submit')->name('anamnesa.submit');
+    Route::post('/kembali', [PublicAnamnesaController::class, 'reset'])->name('anamnesa.reset');
+    Route::get('/logo', [PublicAnamnesaController::class, 'logo'])->name('anamnesa.logo');
+});
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthController::class, 'create'])->name('login');
     Route::post('/login', [AuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
@@ -77,6 +85,8 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/audit', [McuController::class, 'audits'])->name('audits.index');
     });
     Route::middleware('can:examine-mcu')->group(function (): void {
+        Route::post('/kunjungan-mcu/{kunjungan}/barcode-anamnesa', [PublicAnamnesaController::class, 'barcode'])->name('anamnesa.barcode');
+        Route::delete('/kunjungan-mcu/{kunjungan}/barcode-anamnesa', [PublicAnamnesaController::class, 'disable'])->name('anamnesa.disable');
         Route::post('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/foto', [PemeriksaanController::class, 'savePhoto'])->name('pemeriksaan.photo');
         Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/pemeriksaan', [PemeriksaanController::class, 'edit'])->name('pemeriksaan.edit');
         Route::get('/{kunjungan}/peserta/{peserta}/pemeriksaan', [PemeriksaanController::class, 'edit'])->whereUuid(['kunjungan', 'peserta'])->name('pemeriksaan.scan');

@@ -15,6 +15,7 @@
         <td class="p-3"><input data-laboratory-answer name="dynamic_answers[{{ $item['id'] }}]" aria-label="Hasil {{ $item['label'] }}" type="{{ $config['result_type'] === 'number' ? 'number' : 'text' }}" @if($config['result_type'] === 'number') step="any" min="-999999999" max="999999999" @else maxlength="2000" @endif value="{{ $answer }}" class="min-h-12 w-36 rounded-xl border border-slate-300 px-3"><span data-laboratory-status class="mt-2 block text-xs text-slate-500" role="status">{{ $evaluation['status'] }}</span>@error('dynamic_answers.'.$item['id'])<p class="mt-2 text-sm text-red-700">{{ $message }}</p>@enderror</td>
         <td class="p-3">{{ $config['unit'] }}</td><td class="whitespace-pre-line p-3">{{ $config['reference'] }}</td><td data-laboratory-remark class="whitespace-pre-line p-3">{{ $evaluation['remark'] }}</td>
     </tr>
+    @if($item['allow_attachment'] ?? false)<tr><td colspan="5" class="p-3">@include('mcu.dynamic-attachment-field', ['item' => $item])</td></tr>@endif
     @if($hasDefault)<tr class="border-b border-slate-100"><td colspan="5" class="px-3 pb-3 text-xs text-amber-800">Hasil default dari master — belum tersimpan. Cocokkan {{ $item['label'] }} dengan hasil pemeriksaan sebelum menyimpan.</td></tr>@endif
 @endforeach
 </tbody></table></div>

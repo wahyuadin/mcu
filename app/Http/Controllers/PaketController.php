@@ -135,7 +135,7 @@ class PaketController extends Controller
                 throw ValidationException::withMessages(['master_items' => 'Kategori item sudah nonaktif. Muat ulang daftar paket.']);
             }
             $categoryId = $item->mcu_category_id;
-            $data['dynamic_schema'][$categoryId] ??= ['id' => $categoryId, 'name' => $item->category->name, 'order' => $item->category->sort_order, 'items' => []];
+            $data['dynamic_schema'][$categoryId] ??= ['id' => $categoryId, 'name' => $item->category->name, 'order' => $item->category->sort_order, 'has_responsible_doctor' => $item->category->has_responsible_doctor, 'items' => []];
             $data['dynamic_schema'][$categoryId]['items'][] = $item->definition();
         }
         $data['dynamic_schema'] = array_values(collect($data['dynamic_schema'])->sortBy('order')->all());

@@ -21,6 +21,10 @@ class Karyawan extends Model implements Auditable
 
     protected $table = 'karyawans';
 
+    protected $hidden = ['anamnesa_submission'];
+
+    protected $auditExclude = ['anamnesa_submission'];
+
     protected $fillable = [
         'pasien_id',
         'nomor_mcu',
@@ -45,6 +49,7 @@ class Karyawan extends Model implements Auditable
     protected function casts(): array
     {
         return [
+            'anamnesa_submission' => 'encrypted:array',
             'tanggal_lahir' => 'date',
             'tanggal_mcu' => 'date',
         ];

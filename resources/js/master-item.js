@@ -6,6 +6,7 @@ export function configureQuestionCard(card) {
     const defaultResult = laboratory?.querySelector('[data-question-field="lab_default_result"]');
     const rule = laboratory?.querySelector('[data-question-field="lab_rule"]');
     const reference = laboratory?.querySelector('[data-question-field="lab_reference"]');
+    const attachment = card.querySelector('[data-attachment-option]');
     const update = () => {
         const radio = type.value === 'radio';
         mapping.hidden = !radio;
@@ -13,6 +14,10 @@ export function configureQuestionCard(card) {
         mapping.querySelectorAll('textarea').forEach((field) => { field.required = radio; });
         hint.hidden = radio;
         hint.textContent = type.value === 'number' ? 'Jawaban berupa angka' : 'Jawaban berupa teks';
+        if (attachment) {
+            attachment.hidden = !['text', 'number'].includes(type.value);
+            attachment.disabled = attachment.hidden;
+        }
         if (laboratory) {
             const active = ['text', 'number'].includes(type.value);
             const configured = active && (reference.value.trim() !== '' || !!defaultResult?.value.trim());
@@ -159,6 +164,12 @@ export function setupFormBuilder(form, root = document) {
                     reference.className = 'whitespace-pre-line text-sm text-slate-500';
                     reference.textContent = `Hasil · Unit: ${values.lab_unit || '—'} · Nilai normal: ${values.lab_reference || '—'}\nKeterangan normal: ${values.lab_normal_report || '(kosong)'}\nKeterangan tidak normal: ${values.lab_abnormal_report || '(kosong)'}`;
                     section.append(reference);
+                }
+                if (values.allow_attachment && ['text', 'number'].includes(values.input_type)) {
+                    const upload = root.createElement('input');
+                    upload.type = 'file'; upload.disabled = true; upload.accept = 'image/jpeg,image/png,image/webp,application/pdf';
+                    upload.className = 'rounded-xl border border-slate-200 p-3 text-sm';
+                    const label = root.createElement('label'); label.className = 'grid gap-2 text-sm'; label.textContent = 'Lampiran hasil (opsional)'; label.append(upload); section.append(label);
                 }
             }
             preview.append(section);

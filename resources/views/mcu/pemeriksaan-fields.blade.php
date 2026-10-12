@@ -25,11 +25,18 @@
         </dialog>
     @endif
 @elseif($tab === 'anamnesa')
+    @if($peserta->anamnesa_submission)
+        <section class="grid gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-6"><h3 class="font-bold">Anamnesa dari peserta</h3><p class="text-sm">Dikirim: {{ \Carbon\Carbon::parse($peserta->anamnesa_submission['submitted_at'])->format('d/m/Y H:i') }} · {{ ($peserta->anamnesa_submission['reviewed_at'] ?? null) ? 'Sudah ditinjau petugas' : 'Menunggu pemeriksaan petugas' }}</p>
+            @if($reviewSubmission)<input type="hidden" name="submission_id" value="{{ $peserta->anamnesa_submission['id'] }}"><p class="text-sm font-semibold">Jawaban peserta dimuat untuk ditinjau. Periksa dan koreksi sebelum menekan Simpan. Hasil pemeriksaan belum diubah.</p>
+            @elseif(!$readonly && !($peserta->anamnesa_submission['reviewed_at'] ?? null))<a href="{{ route('pemeriksaan.edit', [$kunjungan, $peserta, 'tab' => 'anamnesa', 'review_submission' => 1]) }}" class="justify-self-start rounded-xl bg-blue-900 px-5 py-3 text-sm font-semibold text-white">Tinjau jawaban peserta</a>@endif
+        </section>
+    @endif
     @foreach($anamnesaGroups as $group => $items)
         @php($activeItems = array_filter($items, fn ($item, $key) => $exam->includes($peserta, $key), ARRAY_FILTER_USE_BOTH))
         @if($activeItems)<section class="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6"><h3 class="text-lg font-bold">{{ $group }}</h3>
             @foreach($activeItems as $key => $item)
                 @php($history = $exam->historyValue($key))
+                @if($reviewSubmission) @php($history = $peserta->anamnesa_submission['answers'][$key] ?? ['answer' => null, 'note' => null]) @endif
                 <div class="grid gap-4 border-t border-slate-100 pt-4 sm:grid-cols-2">
                     @include('mcu.field', ['field' => 'anamnesa.'.$key.'.answer', 'label' => $item['label'], 'type' => $item['type'] === 'choice' ? 'select' : 'textarea', 'value' => $history['answer'], 'options' => ['Ya' => 'Ya', 'Tidak' => 'Tidak']])
                     @include('mcu.field', ['field' => 'anamnesa.'.$key.'.note', 'label' => 'Keterangan / sejak kapan / rincian', 'type' => 'textarea', 'value' => $history['note']])
@@ -97,6 +104,9 @@
 @elseif(isset($categoryGroups[$tab]))
     @foreach([$categoryGroups[$tab]] as $group)
         <section class="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6"><h3 class="text-lg font-bold">{{ $group['name'] }}</h3>
+            @if($group['has_responsible_doctor'] ?? true)
+                @include('mcu.field', ['field' => 'category_doctors.'.$group['id'], 'label' => 'Dokter Pemeriksa (opsional)', 'type' => 'select', 'options' => $doctors->pluck('nama_dokter', 'id'), 'value' => ($exam->category_doctors ?? [])[$group['id']] ?? null])
+            @endif
             @foreach(\App\LaboratoryResult::sections($group['items']) as $subsection)
                 @if($subsection['name'])<h4 class="border-b border-slate-200 pb-3 font-bold">{{ $subsection['name'] }}</h4>@endif
                 @php($labItems = array_values(array_filter($subsection['items'], fn ($item) => $item['type'] === 'laboratory')))
@@ -116,6 +126,7 @@
                 @else
                     @include('mcu.field', ['field' => 'dynamic_answers.'.$item['id'], 'label' => $item['label'].($item['required'] ? ' *' : ' (opsional)'), 'type' => $item['type'] === 'number' ? 'number' : 'textarea', 'step' => 'any', 'value' => ($exam->dynamic_answers ?? [])[$item['id']] ?? null])
                     @if($item['help_text'])<p class="text-xs text-slate-500">{{ $item['help_text'] }}</p>@endif
+                    @include('mcu.dynamic-attachment-field', ['item' => $item])
                 @endif
             @endforeach
             @endforeach

@@ -20,7 +20,7 @@
                 foreach ($item->lab_config ?? [] as $key => $value) {
                     $labFields['lab_'.$key] = $key === 'normal_values' ? implode("\n", $value) : $value;
                 }
-                $questions = old('questions', [array_merge(['label' => $item->label, 'input_type' => $item->editorType(), 'yes_report' => $item->yes_report, 'no_report' => $item->no_report, 'help_text' => $item->help_text, 'is_required' => $item->is_required ?? true, 'is_active' => $item->is_active ?? true], $labFields)]);
+                $questions = old('questions', [array_merge(['label' => $item->label, 'input_type' => $item->editorType(), 'allow_attachment' => $item->allow_attachment ?? false, 'yes_report' => $item->yes_report, 'no_report' => $item->no_report, 'help_text' => $item->help_text, 'is_required' => $item->is_required ?? true, 'is_active' => $item->is_active ?? true], $labFields)]);
             @endphp
             @foreach($questions as $index => $question)
                 @include('mcu.masters.question-card', ['question' => $question, 'index' => $index, 'primary' => $item->exists && $index === 0])

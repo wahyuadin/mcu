@@ -58,6 +58,7 @@
                         @foreach($labItems as $item)@php($evaluation = $exam->laboratoryEvaluation($item))<tr class="border-b border-slate-200 {{ $evaluation['status'] === 'Tidak normal' ? 'abnormal' : '' }}"><th class="p-2 font-medium">{{ $item['label'] }}</th><td class="p-2">{{ $exam->dynamicReportValue($item) }}@if($evaluation['status'] === 'Tidak dapat dibandingkan')<span class="block text-xs">Tidak dapat dibandingkan</span>@endif</td><td class="p-2">{{ $item['lab_config']['unit'] }}</td><td class="whitespace-pre-line p-2">{{ $item['lab_config']['reference'] }}</td><td class="whitespace-pre-line p-2">{{ $evaluation['remark'] }}</td></tr>@endforeach
                     </tbody></table>@endif
                     <table class="w-full text-left text-sm"><tbody>@foreach($subsection['items'] as $item)@if($item['type'] !== 'laboratory')<tr class="border-b border-slate-200"><th class="w-1/2 p-2 font-medium">{{ $item['label'] }}</th><td class="whitespace-pre-line p-2">{{ $exam->dynamicReportValue($item) }}</td></tr>@endif @endforeach</tbody></table>
+                    @foreach($subsection['items'] as $item) @include('mcu.report-item-attachment', ['item' => $item]) @endforeach
                 @endforeach
             </section>
         @endforeach
