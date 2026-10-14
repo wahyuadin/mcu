@@ -145,7 +145,7 @@ class McuReport
                     $pages[] = [...$group, 'rows' => $first, 'reference_page' => 0];
                 }
                 if ($remaining !== []) {
-                    $pages[] = [...$group, 'name' => $group['name'].($first !== [] ? ' (LANJUTAN)' : ''), 'rows' => $remaining, 'reference_page' => 1];
+                    $pages[] = [...$group, 'name' => $group['name'].($first !== [] ? '' : ''), 'rows' => $remaining, 'reference_page' => 1];
                 }
             } else {
                 $pages[] = [...$group, 'reference_page' => $page];
