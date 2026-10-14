@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\McuReport;
 use App\Models\Anamnesa;
 use App\Models\Dokter;
 use App\Models\Karyawan;
 use App\Models\Paket;
+use App\Models\Perusahaan;
 use App\Models\RencanaKunjungan;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\View\View;
 
@@ -65,7 +68,7 @@ class LaporanRiwayatController extends Controller
         ]);
     }
 
-    public function showVersion(RencanaKunjungan $kunjungan, Karyawan $peserta, int $version): View
+    public function showVersion(RencanaKunjungan $kunjungan, Karyawan $peserta, int $version, McuReport $report): View
     {
         abort_unless($peserta->rencana_kunjungan_id === $kunjungan->id, 404);
         $exam = $peserta->anamnesa;
@@ -83,16 +86,25 @@ class LaporanRiwayatController extends Controller
         $historicalExam = new Anamnesa;
         $historicalExam->fill($snapshot);
         $historicalExam->dynamic_schema = $snapshot['dynamic_schema'] ?? [];
+        $historicalExam->package_items = $snapshot['package_items'] ?? [];
         $historicalExam->status = 'final';
         $historicalExam->finalized_at = isset($revisionData['at']) ? Carbon::parse($revisionData['at']) : null;
 
         $peserta->load('perusahaan', 'paket');
+        $episode = $revisionData['episode'] ?? [];
+        $peserta->fill(Arr::only($episode, ['nomor_mcu', 'tanggal_mcu', 'nik', 'nip', 'nama_karyawan', 'tanggal_lahir', 'jenis_kelamin', 'bagian', 'foto']));
+        if (isset($episode['perusahaan']['nama_perusahaan'])) {
+            $peserta->setRelation('perusahaan', new Perusahaan(['nama_perusahaan' => $episode['perusahaan']['nama_perusahaan']]));
+        }
+        if (isset($episode['paket']['nama_paket'])) {
+            $peserta->setRelation('paket', new Paket(['nama_paket' => $episode['paket']['nama_paket']]));
+        }
 
         return view('mcu.laporan', [
             'peserta' => $peserta,
             'exam' => $historicalExam,
-            'catalog' => Paket::getDefaultItemCatalog(),
-            'doctors' => Dokter::pluck('nama_dokter', 'id'),
+            'sections' => $report->sections($peserta, $historicalExam),
+            'doctors' => array_replace(Dokter::withTrashed()->pluck('nama_dokter', 'id')->all(), $revisionData['doctors'] ?? []),
             'historicalVersion' => $version,
             'revisionNote' => $revisionData['reason'] ?? null,
         ]);

@@ -9,6 +9,7 @@ import './master-bulk-delete';
 import './laboratory-results';
 import './public-anamnesa';
 import './examination-label';
+import './mcu-report';
 
 const examForm = document.querySelector('[data-exam-form]');
 

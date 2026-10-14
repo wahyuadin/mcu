@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\ExaminationLabel;
 use App\McuCatalog;
+use App\McuReport;
 use App\Models\Anamnesa;
 use App\Models\Dokter;
 use App\Models\Karyawan;
@@ -295,11 +296,14 @@ class PemeriksaanController extends Controller
             $this->lockEditable($kunjungan, $peserta);
             $exam = $peserta->anamnesa()->first();
             abort_unless($exam && $exam->status === 'final', 403);
+            $peserta->load('perusahaan', 'paket');
+            $selectedDoctors = array_filter([$exam->dokter_id, $exam->dokter_fisik_id, ...array_column($exam->penunjang ?? [], 'doctor_id'), ...array_values($exam->category_doctors ?? [])]);
             $revisions = $exam->revisions ?? [];
             $revisions[] = [
                 'reason' => $data['reason'], 'operator_id' => $request->user()->id, 'operator' => $request->user()->name,
                 'at' => now()->toIso8601String(), 'snapshot' => Arr::except($exam->toArray(), ['revisions']),
                 'episode' => $peserta->toArray(),
+                'doctors' => Dokter::withTrashed()->whereIn('id', $selectedDoctors)->pluck('nama_dokter', 'id')->all(),
             ];
             $exam->update(['revisions' => $revisions, 'status' => 'draft', 'finalized_at' => null, 'finalized_by' => null, 'lock_version' => $exam->lock_version + 1]);
             $peserta->update(['status_pemeriksaan' => 'proses']);
@@ -339,17 +343,26 @@ class PemeriksaanController extends Controller
         }
         abort_unless($item === 'foto' || array_key_exists($item, McuCatalog::supporting()), 404);
         $path = $item === 'foto' ? $peserta->foto : ($peserta->anamnesa?->penunjang[$item]['attachment'] ?? null);
+        if ($request->has('version')) {
+            $data = $request->validate(['version' => ['required', 'integer', 'min:1']]);
+            $revision = ($peserta->anamnesa?->revisions ?? [])[$data['version'] - 1] ?? null;
+            abort_unless($revision, 404);
+            $episode = $revision['episode'] ?? [];
+            $path = $item === 'foto' ? (array_key_exists('foto', $episode) ? $episode['foto'] : $peserta->foto) : ($revision['snapshot']['penunjang'][$item]['attachment'] ?? null);
+        }
         abort_unless($path && str_starts_with($path, 'mcu/'.$peserta->id.'/') && Storage::disk('local')->exists($path), 404);
 
         return Storage::disk('local')->response($path, null, ['Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff']);
     }
 
-    public function report(RencanaKunjungan $kunjungan, Karyawan $peserta): View
+    public function report(RencanaKunjungan $kunjungan, Karyawan $peserta, McuReport $report): View
     {
         $this->assertParticipant($kunjungan, $peserta);
         $peserta->load('anamnesa.dokter', 'anamnesa.dokterFisik', 'perusahaan', 'paket');
 
-        return view('mcu.laporan', ['peserta' => $peserta, 'exam' => $peserta->anamnesa ?? new Anamnesa, 'catalog' => Paket::getDefaultItemCatalog(), 'doctors' => Dokter::pluck('nama_dokter', 'id')]);
+        $exam = $peserta->anamnesa ?? new Anamnesa;
+
+        return view('mcu.laporan', ['peserta' => $peserta, 'exam' => $exam, 'sections' => $report->sections($peserta, $exam), 'doctors' => Dokter::withTrashed()->pluck('nama_dokter', 'id')]);
     }
 
     private function saveHistory(Request $request, Karyawan $participant, Anamnesa $exam): void
