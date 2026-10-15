@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DokterController;
 use App\Http\Controllers\HrdController;
 use App\Http\Controllers\LaporanRiwayatController;
@@ -37,6 +38,11 @@ Route::middleware('guest')->group(function (): void {
 Route::middleware('auth')->group(function (): void {
     Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
     Route::get('/dashboard', [McuController::class, 'index'])->name('dashboard');
+    Route::prefix('dashboard')->name('dashboard.')->middleware('can:view-patients')->group(function (): void {
+        Route::get('/data', [DashboardController::class, 'data'])->middleware('throttle:60,1')->name('data');
+        Route::post('/preview', [DashboardController::class, 'preview'])->middleware('throttle:30,1')->name('preview');
+        Route::put('/preferences', [DashboardController::class, 'preferences'])->middleware('throttle:30,1')->name('preferences');
+    });
     Route::get('/users/{user}/avatar', [UserController::class, 'avatar'])->name('users.avatar');
     Route::patch('/profil-saya', [ProfileController::class, 'update'])->middleware('throttle:30,1')->name('profile.update');
     Route::put('/profil-saya/password', [ProfileController::class, 'password'])->middleware('throttle:5,1')->name('profile.password');
@@ -46,7 +52,8 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/participants/{participant}', [HrdController::class, 'participant'])->whereUuid('participant')->middleware('throttle:60,1')->name('participants.show');
         Route::get('/rekap', [HrdController::class, 'recap'])->middleware('throttle:10,1')->name('recap');
         Route::put('/layout', [HrdController::class, 'layout'])->middleware('can:manage-mcu')->name('layout');
-        Route::post('/preview', [HrdController::class, 'preview'])->middleware(['can:manage-mcu', 'throttle:30,1'])->name('preview');
+        Route::put('/preferences', [HrdController::class, 'preferences'])->middleware('throttle:30,1')->name('preferences');
+        Route::post('/preview', [HrdController::class, 'preview'])->middleware('throttle:30,1')->name('preview');
         Route::post('/exports', [HrdController::class, 'export'])->middleware('throttle:5,1')->name('exports.store');
         Route::get('/exports/{export}', [HrdController::class, 'exportStatus'])->name('exports.status');
         Route::get('/exports/{export}/download', [HrdController::class, 'download'])->name('exports.download');

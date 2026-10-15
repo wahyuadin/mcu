@@ -6,6 +6,8 @@ import {
   hrdRowValue,
   hrdWidgetValue,
   setupHrdDashboard,
+  createHrdWidget,
+  filterHrdCatalog,
 } from '../../resources/js/hrd-dashboard.js';
 
 class Timers {
@@ -154,6 +156,9 @@ class Element {
   }
   focus() {
     this.ownerDocument.activeElement = this;
+  }
+  reportValidity() {
+    return true;
   }
 }
 
@@ -359,23 +364,50 @@ function dashboardHarness(t, { builder = false } = {}) {
   });
   if (builder) {
     add('hrdBuilderOpen', 'button');
-    const dialog = add('hrdBuilder', 'dialog');
-    add('hrdBuilderList', 'div', dialog);
-    add('hrdBuilderStatus', 'p', dialog);
+    const toolbar = add('hrdBuilder', 'section');
+    toolbar.hidden = true;
+    add('hrdBuilderStatus', 'p', toolbar);
     ['hrdBuilderClose', 'hrdBuilderDefault', 'hrdBuilderSave'].forEach((key) =>
-      add(key, 'button', dialog)
+      add(key, 'button', toolbar)
     );
-    const form = doc.createElement('form');
-    dialog.append(form);
+    add('hrdCatalogOpen', 'button', toolbar);
+    const catalog = add('hrdCatalog', 'dialog');
+    add('hrdCatalogList', 'div', catalog);
+    add('hrdCatalogSearch', 'input', catalog);
+    add('hrdCatalogCategory', 'select', catalog);
+    add('hrdCatalogCount', 'p', catalog);
+    add('hrdCatalogClose', 'button', catalog);
+    add('hrdCatalogDone', 'button', catalog);
+    const settings = add('hrdWidgetSettings', 'dialog');
+    add('hrdSettingsClose', 'button', settings);
+    const confirmation = add('hrdBuilderConfirm', 'dialog');
+    confirmation.append(doc.createElement('h2'));
+    add('hrdBuilderConfirmText', 'p', confirmation);
+    add('hrdBuilderConfirmAccept', 'button', confirmation);
+    add('hrdBuilderConfirmCancel', 'button', confirmation);
+    const form = add('hrdWidgetForm', 'form', settings);
     const fields = {};
-    ['source', 'dimension', 'title', 'chart', 'metric', 'width'].forEach((name) => {
-      fields[name] = doc.createElement(name === 'title' ? 'input' : 'select');
+    [
+      'source',
+      'dimension',
+      'title',
+      'chart',
+      'metric',
+      'width',
+      'height',
+      'filter_source',
+      'filter_value',
+    ].forEach((name) => {
+      fields[name] = doc.createElement(
+        ['title', 'filter_value'].includes(name) ? 'input' : 'select'
+      );
       form.append(fields[name]);
     });
     for (const [name, values] of [
       ['chart', ['bar', 'donut', 'table', 'indicator', 'number']],
       ['metric', ['count', 'percent', 'average', 'min', 'max']],
       ['width', [1, 2, 3]],
+      ['height', [1, 2]],
     ]) {
       values.forEach((value) => {
         const option = doc.createElement('option');
@@ -385,6 +417,7 @@ function dashboardHarness(t, { builder = false } = {}) {
       fields[name].value = String(values[0]);
     }
     form.elements = { namedItem: (name) => fields[name] };
+    nodes.widgetFields = fields;
   }
   let result = {
     updated_at: '2026-10-15T10:00:00Z',
@@ -539,19 +572,136 @@ test('failed refresh keeps charts and draft inputs while showing an inline error
   assert.match(h.nodes.hrdError.textContent, /Data terakhir tetap ditampilkan/);
 });
 
-test('builder opens with saved configuration, pauses polling and cancellation keeps the unsaved layout out of storage', async (t) => {
+test('inline builder opens with saved configuration, pauses polling and confirmed cancellation keeps the unsaved layout out of storage', async (t) => {
   const h = dashboardHarness(t, { builder: true });
   await flush();
   await h.nodes.hrdBuilderOpen.emit('click');
-  assert.equal(h.nodes.hrdBuilder.open, true);
-  assert.equal(h.nodes.hrdBuilderList.children.length, 1);
+  assert.equal(h.nodes.hrdBuilder.hidden, false);
+  assert.equal(h.root.dataset.editing, 'true');
+  assert.equal(h.nodes.hrdWidgets.children.length, 2);
   assert.ok(![...h.timers.tasks.values()].some((task) => task.delay === 4000));
   await h.nodes.hrdBuilderDefault.emit('click');
-  assert.equal(h.nodes.hrdBuilderList.children.length, 0);
+  assert.equal(h.nodes.hrdBuilderConfirm.open, true);
+  await h.nodes.hrdBuilderConfirmCancel.emit('click');
+  const remove = h.nodes.hrdWidgets.children[0]
+    .querySelectorAll('button')
+    .find((button) => button.textContent === 'Hapus');
+  await remove.emit('click');
+  assert.equal(h.nodes.hrdWidgets.children.length, 1);
   await h.nodes.hrdBuilderClose.emit('click');
-  assert.equal(h.nodes.hrdBuilder.open, false);
+  assert.equal(h.nodes.hrdBuilderConfirm.open, true);
+  await h.nodes.hrdBuilderConfirmAccept.emit('click');
+  assert.equal(h.nodes.hrdBuilder.hidden, true);
   assert.ok(h.calls.every((call) => call.options.method !== 'PUT'));
   assert.equal(h.nodes.hrdWidgets.children.length, 1);
+});
+
+test('catalog defaults are compatible with KPI, numerical, text and laboratory sources', () => {
+  assert.equal(createHrdWidget({ id: 'stat:final', title: 'Final', kind: 'kpi' }).chart, 'number');
+  assert.equal(
+    createHrdWidget({ id: 'height', title: 'Tinggi', kind: 'number' }).metric,
+    'average'
+  );
+  assert.equal(createHrdWidget({ id: 'text', title: 'Catatan', kind: 'text' }).chart, 'table');
+  assert.equal(createHrdWidget({ id: 'lab', title: 'Hb', kind: 'laboratory' }).chart, 'indicator');
+  const sources = [
+    { title: 'Hemoglobin', group: 'Laboratorium', unit: 'g/dL' },
+    { title: 'Departemen', group: 'Demografi' },
+  ];
+  assert.deepEqual(filterHrdCatalog(sources, ' HEMO ', 'Laboratorium'), [sources[0]]);
+  assert.deepEqual(filterHrdCatalog(sources, 'g/dl'), [sources[0]]);
+  assert.deepEqual(filterHrdCatalog(sources, 'Hemoglobin', 'Demografi'), []);
+});
+
+test('catalog search, add and settings update the draft and save only to the personal endpoint', async (t) => {
+  const h = dashboardHarness(t, { builder: true });
+  await flush();
+  await h.nodes.hrdBuilderOpen.emit('click');
+  await h.nodes.hrdCatalogOpen.emit('click');
+  assert.equal(h.nodes.hrdCatalog.open, true);
+  h.nodes.hrdCatalogSearch.value = 'missing';
+  await h.nodes.hrdCatalogSearch.emit('input');
+  assert.match(h.nodes.hrdCatalogList.textContent, /Tidak ada widget/);
+  h.nodes.hrdCatalogSearch.value = '';
+  await h.nodes.hrdCatalogSearch.emit('input');
+  await h.nodes.hrdCatalogList.querySelector('button').emit('click');
+  assert.match(h.nodes.hrdCatalogList.textContent, /2 ditambahkan/);
+  await h.nodes.hrdCatalogDone.emit('click');
+  await h.nodes.hrdWidgets.children[1].querySelector('[data-hrd-settings-open]').emit('click');
+  h.nodes.widgetFields.title.value = 'Judul pribadi';
+  h.nodes.widgetFields.width.value = '2';
+  await h.nodes.hrdWidgetForm.emit('submit');
+  assert.equal(h.nodes.hrdWidgets.children[1].dataset.width, 2);
+  await h.nodes.hrdBuilderSave.emit('click');
+  const save = h.calls.find((call) => call.options.method === 'PUT');
+  const body = JSON.parse(save.options.body);
+  assert.equal(body.widgets.length, 2);
+  assert.equal(body.widgets[1].title, 'Judul pribadi');
+  assert.equal(body.widgets[1].width, 2);
+  assert.equal(body.use_default, false);
+  assert.equal(h.nodes.hrdBuilder.hidden, true);
+});
+
+test('KPI cards show zero instead of an empty-data message and unknown targets remain a dash', async (t) => {
+  const h = dashboardHarness(t);
+  h.result.personal_layout = true;
+  h.result.widgets = [
+    {
+      source: 'stat:registered',
+      title: 'Terdaftar',
+      kind: 'kpi',
+      total: 0,
+      width: 1,
+      height: 1,
+      rows: [],
+    },
+    {
+      source: 'stat:planned',
+      title: 'Target',
+      kind: 'kpi',
+      total: null,
+      width: 1,
+      height: 1,
+      rows: [],
+    },
+  ];
+  await flush();
+  await h.timers.run(4000);
+  assert.match(h.nodes.hrdWidgets.children[0].textContent, /0/);
+  assert.ok(!h.nodes.hrdWidgets.children[0].textContent.includes('Belum ada data'));
+  assert.match(h.nodes.hrdWidgets.children[1].textContent, /—/);
+});
+
+test('failed saves retain the draft and show the actual error without resuming polling', async (t) => {
+  const h = dashboardHarness(t, { builder: true });
+  await flush();
+  await h.nodes.hrdBuilderOpen.emit('click');
+  await h.nodes.hrdWidgets.children[0].querySelector('[data-hrd-settings-open]').emit('click');
+  h.nodes.widgetFields.title.value = 'Perubahan belum disimpan';
+  await h.nodes.hrdWidgetForm.emit('submit');
+  h.fail(new Error('Koneksi offline'));
+  await h.nodes.hrdBuilderSave.emit('click');
+  assert.equal(h.nodes.hrdBuilder.hidden, false);
+  assert.match(h.nodes.hrdWidgets.children[0].textContent, /Perubahan belum disimpan/);
+  assert.match(h.nodes.hrdBuilderStatus.textContent, /Koneksi offline/);
+  assert.equal(h.nodes.hrdBuilderSave.disabled, false);
+  assert.ok(![...h.timers.tasks.values()].some((task) => task.delay === 4000));
+});
+
+test('default reset is a confirmed preview until saved with an explicit reset flag', async (t) => {
+  const h = dashboardHarness(t, { builder: true });
+  await flush();
+  await h.nodes.hrdBuilderOpen.emit('click');
+  await h.nodes.hrdBuilderDefault.emit('click');
+  assert.equal(h.nodes.hrdBuilderConfirm.open, true);
+  assert.ok(h.calls.every((call) => call.options.method !== 'PUT'));
+  await h.nodes.hrdBuilderConfirmAccept.emit('click');
+  await h.timers.run(900);
+  const preview = h.calls.find((call) => call.options.method === 'POST');
+  assert.deepEqual(JSON.parse(preview.options.body), { widgets: [], use_default: true });
+  await h.nodes.hrdBuilderSave.emit('click');
+  const save = h.calls.find((call) => call.options.method === 'PUT');
+  assert.deepEqual(JSON.parse(save.options.body), { widgets: [], use_default: true });
 });
 
 test('revoked access clears private display instead of retaining medical content as a network fallback', async (t) => {
@@ -565,4 +715,20 @@ test('revoked access clears private display instead of retaining medical content
   assert.equal(h.nodes.hrdParticipants.children.length, 0);
   assert.equal(h.nodes.hrdDetailContent.textContent, '');
   assert.equal(h.nodes.hrdExport.disabled, true);
+});
+
+test('access revoked during an editor preview closes editing and clears private display despite paused polling', async (t) => {
+  const h = dashboardHarness(t, { builder: true });
+  await flush();
+  await h.nodes.hrdBuilderOpen.emit('click');
+  await h.nodes.hrdWidgets.children[0].querySelector('[data-hrd-settings-open]').emit('click');
+  h.nodes.widgetFields.title.value = 'Private draft';
+  await h.nodes.hrdWidgetForm.emit('submit');
+  h.fail(Object.assign(new Error('Akses dicabut'), { revoked: true }));
+  await h.timers.run(900);
+  assert.equal(h.nodes.hrdBuilder.hidden, true);
+  assert.equal(h.nodes.hrdWidgets.children.length, 0);
+  assert.equal(h.nodes.hrdParticipants.children.length, 0);
+  assert.equal(h.nodes.hrdBuilderOpen.disabled, true);
+  assert.match(h.nodes.hrdError.textContent, /Akses dicabut/);
 });

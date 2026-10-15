@@ -6,11 +6,13 @@ use App\HrdAnalytics;
 use App\Jobs\GenerateMcuExport;
 use App\McuReport;
 use App\Models\Dokter;
+use App\Models\HrdDashboardPreference;
 use App\Models\Karyawan;
 use App\Models\McuExport;
 use App\Models\Perusahaan;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -18,41 +20,43 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
-use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class HrdController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request): RedirectResponse
     {
         if ($request->user()->role === 'admin' && Perusahaan::doesntExist()) {
-            return view('mcu.hrd-empty');
+            return redirect()->route('dashboard');
         }
         $company = $this->company($request);
 
-        return view('mcu.hrd-dashboard', ['company' => $company, 'companies' => $request->user()->role === 'admin' ? Perusahaan::orderBy('nama_perusahaan')->get() : collect(),
-            'visits' => $company->rencanaKunjungans()->with('pakets')->latest()->get(), 'canBuild' => $request->user()->role === 'admin']);
+        return redirect()->route('dashboard', $request->user()->role === 'admin' ? ['company' => $company->id] : []);
     }
 
     public function data(Request $request, HrdAnalytics $analytics): JsonResponse
     {
         $company = $this->company($request);
         $filters = $this->filters($request, $company);
-        $key = 'hrd:'.$company->id.':'.hash('sha256', json_encode([$filters, $company->dashboard_layout]));
-        $result = Cache::remember($key, 3, function () use ($analytics, $company, $filters): array {
+        $preference = HrdDashboardPreference::where('user_id', $request->user()->id)->where('perusahaan_id', $company->id)->first();
+        $layout = $preference?->widgets ?? $company->dashboard_layout;
+        $key = 'hrd:v2:'.$company->id.':'.hash('sha256', json_encode([$filters, $layout]));
+        $result = Cache::remember($key, 3, function () use ($analytics, $company, $filters, $layout): array {
             $dataset = $analytics->dataset($company, $filters);
+            if (empty($filters['visit']) && empty($filters['period']) && empty($filters['package'])) {
+                Cache::put('hrd-company-sources:v2:'.$company->id, $dataset['sources'], 3);
+            }
             if (! empty($filters['cross_source']) && ! isset($dataset['sources'][$filters['cross_source']])) {
                 throw ValidationException::withMessages(['cross_source' => 'Sumber analisis tidak tersedia pada filter ini.']);
             }
 
-            return $analytics->summarize($dataset, $filters, $company->dashboard_layout) + ['options' => $company->rencanaKunjungans()->with('pakets')->latest()->get()->map(fn ($visit): array => [
+            return $analytics->summarize($dataset, $filters, $layout) + ['options' => $company->rencanaKunjungans()->with('pakets')->latest()->get()->map(fn ($visit): array => [
                 'id' => $visit->id, 'number' => $visit->nomor_kunjungan, 'period' => $visit->periode_kunjungan,
                 'packages' => $visit->pakets->map(fn ($package): array => ['id' => $package->id, 'name' => $package->nama_paket])->all(),
             ])->all()];
         });
-        if ($request->user()->role === 'admin') {
-            $result['builder_sources'] = Cache::remember('hrd-builder-sources:'.$company->id, 3, fn (): array => array_values($analytics->builderSources($analytics->dataset($company, [])['sources'])));
-        }
+        $result['builder_sources'] = array_values($this->builderSources($request, $company, $analytics));
+        $result['personal_layout'] = $preference?->widgets !== null;
         $export = McuExport::where('user_id', $request->user()->id)->where('perusahaan_id', $company->id)->where('expires_at', '>', now())->latest()->orderByDesc('id')->first();
 
         return response()->json($result + ['export' => $export ? $this->exportState($export) : null, 'updated_at' => now()->toIso8601String()])->header('Cache-Control', 'no-store, private');
@@ -71,14 +75,35 @@ class HrdController extends Controller
 
     public function preview(Request $request, HrdAnalytics $analytics): JsonResponse
     {
-        Gate::authorize('manage-mcu');
         $company = $this->company($request);
+        $request->validate(['use_default' => ['sometimes', 'boolean']]);
         $filters = $this->filters($request, $company);
         $dataset = $analytics->dataset($company, $filters);
-        $sources = $analytics->builderSources($analytics->dataset($company, [])['sources']);
+        $sources = $this->builderSources($request, $company, $analytics);
         $widgets = $this->validatedWidgets($request, $sources);
 
-        return response()->json($analytics->summarize($dataset, $filters, $widgets))->header('Cache-Control', 'no-store, private');
+        return response()->json($analytics->summarize($dataset, $filters, $request->boolean('use_default') ? $company->dashboard_layout : $widgets))->header('Cache-Control', 'no-store, private');
+    }
+
+    public function preferences(Request $request, HrdAnalytics $analytics): JsonResponse
+    {
+        $company = $this->company($request);
+        $request->validate(['use_default' => ['sometimes', 'boolean'], 'user_id' => ['prohibited'], 'perusahaan_id' => ['prohibited']]);
+        $widgets = $this->validatedWidgets($request, $this->builderSources($request, $company, $analytics));
+        HrdDashboardPreference::withTrashed()->updateOrCreate(
+            ['user_id' => $request->user()->id, 'perusahaan_id' => $company->id],
+            ['widgets' => $request->boolean('use_default') ? null : $widgets, 'deleted_at' => null],
+        );
+
+        return response()->json(['message' => 'Dashboard pribadi disimpan. Dashboard rekan tidak berubah.'])->header('Cache-Control', 'no-store, private');
+    }
+
+    /** @return array<string, array<string, mixed>> */
+    private function builderSources(Request $request, Perusahaan $company, HrdAnalytics $analytics): array
+    {
+        $sources = Cache::remember('hrd-company-sources:v2:'.$company->id, 3, fn (): array => $analytics->dataset($company, [])['sources']);
+
+        return $request->user()->role === 'admin' ? $analytics->builderSources($sources) : $sources;
     }
 
     /** @param array<string, array<string, mixed>> $sources
@@ -88,12 +113,13 @@ class HrdController extends Controller
     {
         $sourceIds = array_keys($sources);
         $dimensions = array_keys(array_filter($sources, fn (array $source): bool => in_array($source['kind'], ['choice', 'laboratory'], true)));
+        $filterSources = array_keys(array_filter($sources, fn (array $source): bool => ! in_array($source['kind'], ['kpi', 'ranking'], true)));
         $data = $request->validate([
             'widgets' => ['present', 'array', 'list', 'max:200'],
             'widgets.*' => ['array:source,title,chart,metric,dimension,filter_source,filter_value,width,height'],
             'widgets.*.source' => ['required', 'string', Rule::in($sourceIds)],
             'widgets.*.dimension' => ['nullable', 'string', Rule::in($dimensions)],
-            'widgets.*.filter_source' => ['nullable', 'string', Rule::in($sourceIds)],
+            'widgets.*.filter_source' => ['nullable', 'string', Rule::in($filterSources)],
             'widgets.*.filter_value' => ['nullable', 'string', 'max:3000'],
             'widgets.*.title' => ['required', 'string', 'max:255'],
             'widgets.*.chart' => ['required', Rule::in(['bar', 'stacked', 'pie', 'donut', 'table', 'indicator', 'number'])],
@@ -103,6 +129,9 @@ class HrdController extends Controller
         ]);
         foreach ($data['widgets'] as $index => $widget) {
             $source = $sources[$widget['source']];
+            if ($source['kind'] === 'kpi' && ($widget['chart'] !== 'number' || $widget['metric'] !== 'count' || ! empty($widget['dimension']) || ! empty($widget['filter_source']))) {
+                throw ValidationException::withMessages(['widgets.'.$index.'.chart' => 'KPI menggunakan kartu angka dan jumlah, tanpa pengelompokan atau filter khusus kartu.']);
+            }
             if (in_array($widget['metric'], ['average', 'min', 'max'], true) && $source['kind'] !== 'number') {
                 throw ValidationException::withMessages(['widgets.'.$index.'.metric' => 'Rata-rata, minimum, dan maksimum hanya tersedia untuk sumber angka.']);
             }
@@ -190,7 +219,9 @@ class HrdController extends Controller
     {
         $company = $this->company($request);
         $filters = $this->filters($request, $company);
-        $rows = $analytics->summarize($analytics->dataset($company, $filters), $filters, $company->dashboard_layout)['widgets'];
+        $layout = HrdDashboardPreference::where('user_id', $request->user()->id)->where('perusahaan_id', $company->id)->first()?->widgets ?? $company->dashboard_layout;
+        $dataset = $analytics->dataset($company, $filters);
+        $rows = $analytics->summarize($dataset, $filters, $layout)['widgets'];
 
         return response()->streamDownload(function () use ($rows): void {
             $stream = fopen('php://output', 'w');
@@ -232,7 +263,7 @@ class HrdController extends Controller
     private function filters(Request $request, Perusahaan $company): array
     {
         $data = $request->validate(['visit' => ['nullable', 'uuid'], 'package' => ['nullable', 'uuid'], 'period' => ['nullable', 'string', 'max:255'], 'q' => ['nullable', 'string', 'max:255'],
-            'cross_source' => ['nullable', 'string', 'max:160'], 'cross_value' => ['nullable', 'string', 'max:3000'], 'page' => ['nullable', 'integer', 'min:1', 'max:1000000'], 'released' => ['nullable', 'boolean']]);
+            'cross_source' => ['nullable', 'string', 'max:160'], 'cross_value' => ['nullable', 'string', 'max:3000'], 'page' => ['nullable', 'integer', 'min:1', 'max:1000000'], 'released' => ['nullable', 'boolean'], 'workspace' => ['nullable', 'boolean']]);
         if (! empty($data['visit'])) {
             abort_unless($company->rencanaKunjungans()->whereKey($data['visit'])->exists(), 404);
         }

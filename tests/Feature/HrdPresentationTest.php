@@ -34,7 +34,7 @@ class HrdPresentationTest extends TestCase
         $exam = $participant->anamnesa()->create(['rencana_kunjungan_id' => $participant->rencana_kunjungan_id, 'status' => 'final', 'package_items' => ['bmi' => true], 'dynamic_schema' => $schema,
             'dynamic_answers' => [$number->id => 170, $radio->id => 'TIDAK', $text->id => 'Catatan singkat', $lab->id => 14.5], 'status_kelaikan' => 'Fit to Work', 'catatan_dokter' => 'Hasil pemeriksaan dalam batas normal.', 'anjuran_saran' => 'Olahraga teratur dan pemeriksaan berkala.', 'bmi' => 22.5, 'kategori_bmi' => 'Normal']);
         $this->actingAs(User::factory()->create(['role' => 'admin', 'name' => 'Admin Demo']));
-        $dashboard = $this->get(route('hrd.index', ['company' => $participant->perusahaan_id]))->assertOk()->assertSee('Kanvas & pratinjau', false)->assertSee('data-preview-url', false);
+        $dashboard = $this->get(route('dashboard', ['company' => $participant->perusahaan_id]))->assertOk()->assertSee('Kanvas & pratinjau', false)->assertSee('data-preview-url', false);
         $data = $this->getJson(route('hrd.data', ['company' => $participant->perusahaan_id]))->assertOk();
         $browser = $this->get(route('pemeriksaan.report', [$participant->rencana_kunjungan_id, $participant]))->assertOk()->assertSee('data-report-print', false)->assertSee('Catatan singkat');
         $renderer = new McuPdf(new McuReport);

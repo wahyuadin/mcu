@@ -22,8 +22,8 @@ class HrdWorkspaceTest extends TestCase
         $participant = Karyawan::factory()->create(['nama_karyawan' => 'Perusahaan sendiri']);
         $foreign = Karyawan::factory()->create(['nama_karyawan' => 'Rahasia perusahaan lain']);
         $hrd = User::factory()->create(['role' => 'hrd', 'perusahaan_id' => $participant->perusahaan_id]);
-        $this->actingAs($hrd)->get(route('dashboard'))->assertRedirect(route('hrd.index'));
-        $this->get(route('hrd.index'))->assertOk()->assertSee('Pembaruan otomatis setiap 4 detik')->assertDontSee('Rahasia perusahaan lain');
+        $this->actingAs($hrd)->get(route('hrd.index'))->assertRedirect(route('dashboard'));
+        $this->get(route('dashboard'))->assertOk()->assertSee('Pembaruan otomatis setiap 4 detik')->assertDontSee('Rahasia perusahaan lain');
         $this->getJson(route('hrd.data'))->assertOk()->assertJsonPath('stats.registered', 1)->assertJsonPath('participants.0.name', 'Perusahaan sendiri')->assertDontSee('Rahasia perusahaan lain');
         $this->getJson(route('hrd.data', ['company' => $foreign->perusahaan_id]))->assertNotFound();
         $this->getJson(route('hrd.data', ['visit' => $foreign->rencana_kunjungan_id]))->assertNotFound();

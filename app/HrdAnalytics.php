@@ -10,6 +10,13 @@ use App\Models\RencanaKunjungan;
 
 class HrdAnalytics
 {
+    /** @return array<string, string> */
+    public function statLabels(): array
+    {
+        return ['planned' => 'Target peserta MCU', 'registered' => 'Peserta terdaftar', 'final' => 'Sudah MCU (final)', 'remaining' => 'Belum MCU',
+            'released' => 'Laporan dirilis', 'canceled' => 'Peserta batal', 'absent' => 'Tidak hadir'];
+    }
+
     /** @param array<string, mixed> $filters
      * @return array{sources: array<string, array<string, mixed>>, records: list<array<string, mixed>>, planned: ?int}
      */
@@ -24,6 +31,9 @@ class HrdAnalytics
             ->select(['id', 'perusahaan_id', 'rencana_kunjungan_id', 'paket_id', 'nama_karyawan', 'nomor_mcu', 'nip', 'bagian', 'jenis_kelamin', 'tanggal_lahir', 'tanggal_mcu', 'is_closing', 'status_pemeriksaan'])
             ->orderBy('nama_karyawan')->orderBy('id')->lazy(150);
         $sources = [];
+        foreach ($this->statLabels() as $key => $label) {
+            $sources['stat:'.$key] = ['id' => 'stat:'.$key, 'title' => $label, 'group' => 'Ringkasan MCU', 'kind' => 'kpi', 'medical' => false];
+        }
         foreach (['gender' => 'Jenis kelamin', 'age' => 'Kelompok usia', 'department' => 'Departemen', 'package' => 'Paket MCU', 'visit' => 'Kunjungan', 'status' => 'Progres pemeriksaan', 'fitness' => 'Kelayakan kerja'] as $key => $label) {
             $sources[$key] = ['id' => $key, 'title' => $label, 'group' => in_array($key, ['fitness', 'bmi'], true) ? 'Kesimpulan' : 'Demografi', 'kind' => 'choice', 'medical' => in_array($key, ['fitness', 'bmi'], true)];
         }
@@ -178,9 +188,16 @@ class HrdAnalytics
         $stats = ['planned' => $target, 'registered' => count($records), 'final' => $final, 'remaining' => $target === null ? null : max(0, $target - $final),
             'released' => $collection->where('released', true)->count(), 'canceled' => $collection->where('status', 'batal')->count(), 'absent' => $collection->where('status', 'tidak_hadir')->count()];
         $widgets = [];
-        $configuration = $layout ?? array_map(fn (array $source): array => ['source' => $source['id'], 'title' => $source['title'], 'dimension' => '', 'chart' => $source['kind'] === 'number' ? 'number' : ($source['kind'] === 'text' ? 'table' : ($source['kind'] === 'laboratory' ? 'indicator' : 'bar')), 'metric' => $source['kind'] === 'number' ? 'average' : 'count', 'width' => 1, 'height' => 1], array_values($dataset['sources']));
+        $configuration = $layout ?? array_map(fn (array $source): array => ['source' => $source['id'], 'title' => $source['title'], 'dimension' => '', 'chart' => in_array($source['kind'], ['number', 'kpi'], true) ? 'number' : ($source['kind'] === 'text' ? 'table' : ($source['kind'] === 'laboratory' ? 'indicator' : 'bar')), 'metric' => $source['kind'] === 'number' ? 'average' : 'count', 'width' => 1, 'height' => 1], array_values($dataset['sources']));
         foreach ($configuration as $config) {
             $source = $dataset['sources'][$config['source']] ?? null;
+            if (($source['kind'] ?? null) === 'kpi') {
+                $value = $stats[substr($source['id'], 5)];
+                $widgets[] = [...$config, 'kind' => 'kpi', 'group' => 'Ringkasan MCU', 'total' => $value, 'rows' => [['label' => $config['title'], 'count' => $value, 'percent' => null, 'value' => $value]],
+                    'unit' => 'peserta', 'reference' => '', 'numeric' => null, 'abnormal_percent' => null, 'dimension_title' => null];
+
+                continue;
+            }
             $dimension = $dataset['sources'][$config['dimension'] ?? ''] ?? null;
             $filterSource = $dataset['sources'][$config['filter_source'] ?? ''] ?? null;
             $widgetRecords = array_values(array_filter($records, function (array $row) use ($source, $dimension, $filterSource, $config): bool {

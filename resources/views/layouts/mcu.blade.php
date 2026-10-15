@@ -15,7 +15,7 @@
             class="fixed inset-y-0 left-0 z-50 mt-1.5 flex w-72 -translate-x-full flex-col overflow-hidden border-r border-slate-200/70 bg-white shadow-2xl shadow-slate-900/10 transition-transform duration-300 lg:static lg:z-40 lg:translate-x-0 lg:shadow-none">
             <div class="flex h-20 shrink-0 items-center justify-between border-b border-slate-100 px-6 lg:px-8">
                 <a href="{{ route('dashboard') }}" class="flex items-center gap-3"><img
-                        src="{{ asset('template/assets/logo.png') }}" alt="Nayaka"
+                        src="{{ asset('Template/assets/logo.png') }}" alt="Nayaka"
                         class="h-10 w-auto object-contain"></a>
                 <button type="button" id="close-sidebar"
                     class="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 lg:hidden"
@@ -31,21 +31,19 @@
                 <div class="space-y-1.5">
                     <p class="px-3 pb-1 text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-400">Ringkasan
                     </p>
-                    <a data-sidebar-link href="{{ route('dashboard') }}"
-                        class="group flex items-center gap-3 rounded-xl px-3 py-2.5 font-semibold transition-colors {{ request()->routeIs('dashboard') ? 'bg-[#00008B] text-white shadow-lg shadow-blue-900/15' : 'text-slate-600 hover:bg-slate-100 hover:text-[#00008B]' }}"><span
-                            class="flex h-9 w-9 items-center justify-center rounded-lg {{ request()->routeIs('dashboard') ? 'bg-white/15' : 'bg-slate-100 group-hover:bg-blue-50' }}"><svg
+                    <a data-sidebar-link href="{{ route('dashboard') }}" @if(request()->routeIs('dashboard', 'hrd.index')) aria-current="page" @endif
+                        class="group flex items-center gap-3 rounded-xl px-3 py-2.5 font-semibold transition-colors {{ request()->routeIs('dashboard', 'hrd.index') ? 'bg-[#00008B] text-white shadow-lg shadow-blue-900/15' : 'text-slate-600 hover:bg-slate-100 hover:text-[#00008B]' }}"><span
+                            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg {{ request()->routeIs('dashboard', 'hrd.index') ? 'bg-white/15' : 'bg-slate-100 group-hover:bg-blue-50' }}"><svg
                                 class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M3 12l9-9 9 9M5 10v10h14V10M9 20v-6h6v6" />
                             </svg></span><span>Dashboard</span></a>
                 </div>
 
+                @can('view-patients')
                 <div class="space-y-1.5">
                     <p class="px-3 pb-1 text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-400">
                         Operasional MCU</p>
-                    @can('view-hrd')
-                        <a data-sidebar-link href="{{ route('hrd.index') }}" class="group flex items-center gap-3 rounded-xl px-3 py-2.5 font-semibold {{ request()->routeIs('hrd.*') ? 'bg-[#00008B] text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-[#00008B]' }}"><svg aria-hidden="true" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 20V10m7 10V4m7 16v-8M2 22h20"/></svg><span>Dashboard & Laporan HRD</span></a>
-                    @endcan
                     @can('view-patients')
                         <a data-sidebar-link href="{{ route('kunjungan-mcu.index') }}"
                             class="group flex items-center gap-3 rounded-xl px-3 py-2.5 font-semibold transition-colors {{ request()->routeIs('kunjungan-mcu.*', 'pemeriksaan.edit', 'pemeriksaan.scan') ? 'bg-[#00008B] text-white shadow-lg shadow-blue-900/15' : 'text-slate-600 hover:bg-slate-100 hover:text-[#00008B]' }}"><span
@@ -66,6 +64,7 @@
                     @endcan
                 </div>
 
+                @endcan
                 @canany(['view-patients', 'manage-mcu'])
                     <div class="space-y-1.5">
                         <p class="px-3 pb-1 text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-400">Master

@@ -106,6 +106,38 @@ export function hrdWidgetValue(widget) {
   return widget.total;
 }
 
+export function createHrdWidget(source) {
+  return {
+    source: source.id,
+    title: source.title,
+    dimension: '',
+    filter_source: '',
+    filter_value: '',
+    chart: ['number', 'kpi'].includes(source.kind)
+      ? 'number'
+      : ['text', 'operation_table'].includes(source.kind)
+        ? 'table'
+        : source.kind === 'laboratory'
+          ? 'indicator'
+          : 'bar',
+    metric: source.kind === 'number' ? 'average' : 'count',
+    width: source.kind === 'operation_table' ? 3 : 1,
+    height: 1,
+  };
+}
+
+export function filterHrdCatalog(sources, query = '', group = '') {
+  const search = query.trim().toLocaleLowerCase('id');
+  return sources.filter(
+    (source) =>
+      (!group || source.group === group) &&
+      (!search ||
+        `${source.title} ${source.group} ${source.unit ?? ''}`
+          .toLocaleLowerCase('id')
+          .includes(search))
+  );
+}
+
 export function setupHrdDashboard(root) {
   const doc = root.ownerDocument;
   const filters = root.querySelector('[data-hrd-filters]');
@@ -116,7 +148,6 @@ export function setupHrdDashboard(root) {
   const error = root.querySelector('[data-hrd-error]');
   const confirm = root.querySelector('[data-hrd-confirm]');
   const detail = root.querySelector('[data-hrd-detail]');
-  const builder = root.querySelector('[data-hrd-builder]');
   const colors = ['#2563eb', '#059669', '#db2777', '#7c3aed', '#0891b2', '#d97706', '#475569'];
   const labels = {
     belum: 'Belum mulai',
@@ -136,10 +167,10 @@ export function setupHrdDashboard(root) {
   let confirmedExport;
   let widgetSignature;
   let participantSignature;
-  let draft = [];
   let editing = false;
   let detailRequest;
   let detailVersion = 0;
+  let finishEditing = () => {};
   const selected = new Set();
   const widgetCards = new Map();
   const participantRows = new Map();
@@ -160,7 +191,11 @@ export function setupHrdDashboard(root) {
     return node;
   };
   const params = () => {
-    const query = new URLSearchParams({ company: root.dataset.company, page: String(page) });
+    const query = new URLSearchParams({
+      company: root.dataset.company,
+      page: String(page),
+      workspace: '1',
+    });
     for (const [field, value] of Object.entries(activeFilters)) {
       if (value) query.set(field, value);
     }
@@ -303,6 +338,21 @@ export function setupHrdDashboard(root) {
   };
   const chart = (widget) => {
     const body = el('div', '', 'hrd-widget-body');
+    if (widget.kind === 'kpi') {
+      body.append(
+        el('strong', formatNumber(widget.total), 'hrd-kpi-value'),
+        el(
+          'p',
+          widget.total === null
+            ? 'Belum tersedia pada cakupan data ini'
+            : widget.source === 'stat:remaining'
+              ? 'Target dikurangi peserta dengan hasil final'
+              : 'Peserta pada cakupan data terpilih',
+          'text-xs leading-5 text-slate-500'
+        )
+      );
+      return body;
+    }
     if (!widget.total) {
       body.append(
         el(
@@ -438,8 +488,14 @@ export function setupHrdDashboard(root) {
     const signature = JSON.stringify(data.widgets);
     if (signature === widgetSignature || editing) return;
     widgetSignature = signature;
+    grid.querySelector('[data-hrd-empty]')?.remove();
     const keys = new Set();
-    data.widgets.forEach((widget, index) => {
+    const defaultStats = root.querySelector('[data-dashboard-default-stats]');
+    if (defaultStats) defaultStats.hidden = data.personal_layout || editing;
+    const visibleWidgets = data.personal_layout
+      ? data.widgets
+      : data.widgets.filter((widget) => widget.kind !== 'kpi');
+    visibleWidgets.forEach((widget, index) => {
       const key = `${index}:${widget.source}`;
       keys.add(key);
       let state = widgetCards.get(key);
@@ -468,11 +524,13 @@ export function setupHrdDashboard(root) {
         });
         open.setAttribute('aria-label', `Detail ${widget.title}`);
         heading.append(title, open);
+        open.hidden = widget.kind === 'kpi';
         card.append(heading);
       }
       state.widget = widget;
       state.card.dataset.width = widget.width;
       state.card.dataset.height = widget.height;
+      state.card.dataset.kind = widget.kind;
       state.name.textContent = widget.title;
       state.subtitle.textContent = [
         widget.group,
@@ -514,6 +572,19 @@ export function setupHrdDashboard(root) {
         widgetCards.delete(key);
       }
     });
+    if (!visibleWidgets.length) {
+      const empty = el('div', '', 'hrd-empty');
+      empty.dataset.hrdEmpty = '';
+      empty.append(
+        el('h3', 'Ruang untuk prioritas Anda', 'text-lg font-bold text-slate-800'),
+        el(
+          'p',
+          'Klik Atur dashboard, lalu tambahkan widget dari katalog.',
+          'mt-2 text-sm text-slate-500'
+        )
+      );
+      grid.append(empty);
+    }
   };
   const openParticipant = async (row) => {
     detailRequest?.abort();
@@ -694,6 +765,36 @@ export function setupHrdDashboard(root) {
     exporting = ['queued', 'processing'].includes(exportState.status);
     selectionChanged();
   };
+  const handleDataError = (exception) => {
+    root.querySelector('[data-hrd-live]').textContent = 'Koneksi terputus';
+    if (exception.revoked) {
+      data = null;
+      exportState = null;
+      selected.clear();
+      widgetCards.clear();
+      participantRows.clear();
+      grid.replaceChildren();
+      tbody.replaceChildren();
+      detail.querySelector('[data-hrd-detail-content]').replaceChildren();
+      detail.close();
+      if (editing) finishEditing(false);
+      root.querySelector('[data-hrd-catalog]')?.close();
+      root.querySelector('[data-hrd-widget-settings]')?.close();
+      root.querySelector('[data-hrd-builder-confirm]')?.close();
+      const builderOpen = root.querySelector('[data-hrd-builder-open]');
+      if (builderOpen) builderOpen.disabled = true;
+      root.querySelectorAll('[data-hrd-stat]').forEach((node) => {
+        node.textContent = '—';
+      });
+      root.querySelector('[data-hrd-download]').hidden = true;
+      root.querySelector('[data-hrd-export-state]').hidden = true;
+      exportButton.disabled = true;
+      poller.stop();
+    }
+    showError(
+      `${exception.message}${exception.revoked ? '' : ' Data terakhir tetap ditampilkan.'}`
+    );
+  };
   const poller = startHrdPolling({
     document: doc,
     load: async (signal) => request(`${root.dataset.dataUrl}?${params()}`, { signal }),
@@ -724,31 +825,15 @@ export function setupHrdDashboard(root) {
       selectionChanged();
       showExport();
       updateOptions();
+      const layoutNote = root.querySelector('[data-hrd-layout-note]');
+      if (layoutNote)
+        layoutNote.textContent = result.personal_layout
+          ? 'Susunan pribadi Anda · tersimpan untuk akun ini.'
+          : 'Tampilan awal perusahaan · sesuaikan menjadi dashboard pribadi Anda.';
+      const builderOpen = root.querySelector('[data-hrd-builder-open]');
+      if (builderOpen) builderOpen.disabled = false;
     },
-    error: (exception) => {
-      root.querySelector('[data-hrd-live]').textContent = 'Koneksi terputus';
-      if (exception.revoked) {
-        data = null;
-        exportState = null;
-        selected.clear();
-        widgetCards.clear();
-        participantRows.clear();
-        grid.replaceChildren();
-        tbody.replaceChildren();
-        detail.querySelector('[data-hrd-detail-content]').replaceChildren();
-        detail.close();
-        builder?.close();
-        root.querySelectorAll('[data-hrd-stat]').forEach((node) => {
-          node.textContent = '—';
-        });
-        root.querySelector('[data-hrd-download]').hidden = true;
-        exportButton.disabled = true;
-        poller.stop();
-      }
-      showError(
-        `${exception.message}${exception.revoked ? '' : ' Data terakhir tetap ditampilkan.'}`
-      );
-    },
+    error: handleDataError,
   });
   const updateOptions = () => {
     if (!data?.options) return;
@@ -853,7 +938,7 @@ export function setupHrdDashboard(root) {
     link.remove();
   });
   root.querySelector('[data-hrd-company]')?.addEventListener('change', (event) => {
-    const url = new URL(window.location.href);
+    const url = new URL(root.dataset.dashboardUrl ?? window.location.href, window.location.href);
     url.search = new URLSearchParams({ company: event.target.value });
     window.location.assign(url);
   });
@@ -896,9 +981,69 @@ export function setupHrdDashboard(root) {
     detailVersion++;
     detailRequest?.abort();
   });
+  const editor = setupDashboardBuilder({
+    root,
+    grid,
+    poller,
+    chart,
+    request,
+    params,
+    getData: () => data,
+    handleDataError,
+    onStart: () => {
+      editing = true;
+      const defaultStats = root.querySelector('[data-dashboard-default-stats]');
+      if (defaultStats) defaultStats.hidden = true;
+    },
+    onFinish: () => {
+      editing = false;
+      widgetSignature = null;
+      if (data) renderWidgets();
+    },
+  });
+  finishEditing = editor.close;
+  return { poller };
+}
+
+export function setupDashboardBuilder({
+  root,
+  grid,
+  poller,
+  chart,
+  request,
+  params = () => new URLSearchParams(),
+  getData,
+  handleDataError,
+  onStart = () => {},
+  onFinish = () => {},
+}) {
+  const doc = root.ownerDocument;
+  const builder = root.querySelector('[data-hrd-builder]');
+  const el = (tag, text = '', className = '') => {
+    const node = doc.createElement(tag);
+    node.textContent = text;
+    node.className = className;
+    return node;
+  };
+  const button = (text, action, className = 'hrd-button') => {
+    const node = el('button', text, className);
+    node.type = 'button';
+    node.addEventListener('click', action);
+    return node;
+  };
+  let data;
+  let draft = [];
+  let editing = false;
+  let finishEditing = () => {};
   if (builder) {
-    const list = builder.querySelector('[data-hrd-builder-list]');
-    const add = builder.querySelector('form');
+    const list = grid;
+    const catalog = root.querySelector('[data-hrd-catalog]');
+    const catalogList = root.querySelector('[data-hrd-catalog-list]');
+    const search = root.querySelector('[data-hrd-catalog-search]');
+    const category = root.querySelector('[data-hrd-catalog-category]');
+    const settings = root.querySelector('[data-hrd-widget-settings]');
+    const add = root.querySelector('[data-hrd-widget-form]');
+    const confirmation = root.querySelector('[data-hrd-builder-confirm]');
     const status = builder.querySelector('[data-hrd-builder-status]');
     let dragIndex;
     let sources = [];
@@ -909,6 +1054,30 @@ export function setupHrdDashboard(root) {
     let previewRequested = false;
     let previewVersion = 0;
     let saving = false;
+    let selectedWidget;
+    let originalDraft;
+    let useDefault = false;
+    let confirmedAction;
+    const fields = Object.fromEntries(
+      [
+        'source',
+        'dimension',
+        'chart',
+        'metric',
+        'title',
+        'width',
+        'height',
+        'filter_source',
+        'filter_value',
+      ].map((name) => [name, add.elements.namedItem(name)])
+    );
+    const dirty = () => useDefault || JSON.stringify(draft) !== originalDraft;
+    const ask = (title, text, action) => {
+      confirmedAction = action;
+      confirmation.querySelector('h2').textContent = title;
+      root.querySelector('[data-hrd-builder-confirm-text]').textContent = text;
+      confirmation.showModal();
+    };
     const sourceOptions = () =>
       sources.map((source) => [
         source.id,
@@ -944,9 +1113,15 @@ export function setupHrdDashboard(root) {
     };
     const normalizeOptions = (sourceId, selects, widget) => {
       const source = sources.find((source) => source.id === sourceId);
+      const kpi = source?.kind === 'kpi';
+      const fixed = kpi || source?.kind === 'operation_table';
+      const fixedChart = kpi ? 'number' : 'table';
+      const advanced = add.querySelector('[data-dashboard-advanced]');
+      if (advanced) advanced.hidden = fixed;
       [...selects.metric.options].forEach((option) => {
         option.disabled =
-          ['average', 'min', 'max'].includes(option.value) && source?.kind !== 'number';
+          (fixed && option.value !== 'count') ||
+          (['average', 'min', 'max'].includes(option.value) && source?.kind !== 'number');
       });
       if (selects.metric.selectedOptions[0]?.disabled) {
         selects.metric.value = 'count';
@@ -954,23 +1129,33 @@ export function setupHrdDashboard(root) {
       }
       [...selects.chart.options].forEach((option) => {
         option.disabled =
+          (fixed && option.value !== fixedChart) ||
           (option.value === 'indicator' && source?.kind !== 'laboratory') ||
           (['average', 'min', 'max'].includes(selects.metric.value) &&
             ['pie', 'donut', 'stacked'].includes(option.value));
       });
       if (selects.chart.selectedOptions[0]?.disabled) {
-        selects.chart.value = 'bar';
-        if (widget) widget.chart = 'bar';
+        selects.chart.value = fixed ? fixedChart : 'bar';
+        if (widget) widget.chart = selects.chart.value;
       }
-      selects.dimension.disabled = source?.kind === 'ranking';
+      selects.dimension.disabled = fixed || source?.kind === 'ranking';
       if (selects.dimension.disabled) {
         selects.dimension.value = '';
         if (widget) widget.dimension = '';
+      }
+      if (selects.filter_source) {
+        selects.filter_source.disabled = fixed;
+        selects.filter_value.disabled = fixed;
+        if (fixed) {
+          selects.filter_source.value = '';
+          selects.filter_value.value = '';
+        }
       }
     };
     const renderPreviews = () => {
       [...list.children].forEach((card, index) => {
         const target = card.querySelector('[data-builder-preview]');
+        if (!target) return;
         const scroll = target.scrollTop;
         const widget = previews[index];
         target.replaceChildren(
@@ -982,7 +1167,7 @@ export function setupHrdDashboard(root) {
       });
     };
     const runPreview = async () => {
-      if (!builder.open || saving) return;
+      if (!editing || saving) return;
       if (previewRunning) {
         previewRequested = true;
         return;
@@ -997,19 +1182,28 @@ export function setupHrdDashboard(root) {
           method: 'POST',
           signal: previewRequest.signal,
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ widgets: draft }),
+          body: JSON.stringify({ widgets: useDefault ? [] : draft, use_default: useDefault }),
         });
-        if (version === previewVersion && builder.open) {
+        if (version === previewVersion && editing) {
           previews = result.widgets;
-          renderPreviews();
-          status.textContent = 'Pratinjau diperbarui. Susunan belum disimpan.';
+          if (useDefault) {
+            draft = result.layout.map((widget) => ({ ...widget }));
+            renderDraft();
+          } else renderPreviews();
+          status.textContent = useDefault
+            ? 'Tampilan default disiapkan. Simpan untuk menerapkannya ke akun Anda.'
+            : 'Pratinjau diperbarui · perubahan belum disimpan.';
         }
       } catch (exception) {
-        if (exception.name !== 'AbortError' && version === previewVersion && builder.open)
+        if (exception.revoked) {
+          handleDataError(exception);
+          return;
+        }
+        if (exception.name !== 'AbortError' && version === previewVersion && editing)
           status.textContent = exception.message;
       } finally {
         previewRunning = false;
-        if (previewRequested && builder.open && !saving)
+        if (previewRequested && editing && !saving)
           previewTimer = window.setTimeout(runPreview, 900);
       }
     };
@@ -1025,6 +1219,13 @@ export function setupHrdDashboard(root) {
           const card = el('div', '', 'hrd-widget hrd-builder-card');
           card.dataset.width = widget.width;
           card.dataset.height = widget.height;
+          card.dataset.kind = sources.find((source) => source.id === widget.source)?.kind ?? 'text';
+          card.dataset.hrdEditIndex = index;
+          const changed = () => {
+            useDefault = false;
+            renderDraft();
+            schedulePreview();
+          };
           const handle = button('⠿ Seret', () => {}, 'hrd-button cursor-grab');
           handle.draggable = true;
           handle.setAttribute('aria-label', `Seret kartu ${index + 1}`);
@@ -1041,91 +1242,26 @@ export function setupHrdDashboard(root) {
             event.preventDefault();
             if (Number.isInteger(dragIndex)) {
               draft = moveHrdWidget(draft, dragIndex, index);
+              previews = moveHrdWidget(previews, dragIndex, index);
               dragIndex = undefined;
-              renderDraft();
-              schedulePreview();
+              changed();
             }
           });
-          const title = el('input');
-          title.type = 'text';
-          title.value = widget.title;
-          title.maxLength = 255;
-          title.className = 'min-h-12 min-w-0 rounded-xl border border-slate-300 px-3 text-base';
-          title.setAttribute('aria-label', 'Judul kartu');
-          title.addEventListener('input', () => {
-            widget.title = title.value;
-          });
-          title.addEventListener('change', schedulePreview);
-          const actions = el('div', '', 'flex flex-wrap items-center gap-2');
-          const selects = {};
-          const select = (entries, property, labelText) => {
-            const label = el(
-              'label',
-              labelText,
-              'grid min-w-0 gap-2 text-xs font-semibold text-slate-500'
-            );
-            const node = el('select');
-            node.className =
-              'min-h-11 min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-base';
-            node.setAttribute('aria-label', labelText);
-            fillOptions(node, entries, widget[property]);
-            selects[property] = node;
-            node.addEventListener('change', () => {
-              widget[property] = ['width', 'height'].includes(property)
-                ? Number(node.value)
-                : node.value;
-              normalizeOptions(widget.source, selects, widget);
-              card.dataset.width = widget.width;
-              card.dataset.height = widget.height;
-              schedulePreview();
-            });
-            label.append(node);
-            return label;
-          };
-          const controls = el('div', '', 'grid min-w-0 gap-3 sm:grid-cols-2');
-          controls.append(
-            select(sourceOptions(), 'source', 'Sumber / ukuran'),
-            select(dimensionOptions(), 'dimension', 'Kelompokkan menurut'),
-            select(chartOptions, 'chart', 'Visualisasi'),
-            select(metricOptions, 'metric', 'Statistik'),
-            select(
-              [
-                [1, '1 kolom'],
-                [2, '2 kolom'],
-                [3, '3 kolom'],
-              ],
-              'width',
-              'Lebar'
-            ),
-            select(
-              [
-                [1, 'Standar'],
-                [2, 'Tinggi'],
-              ],
-              'height',
-              'Tinggi'
+          const heading = el('div', '', 'hrd-widget-heading');
+          const title = el('div', '', 'min-w-0');
+          title.append(
+            el('h3', widget.title, 'hrd-widget-title'),
+            el(
+              'p',
+              `${card.dataset.kind === 'kpi' ? 'KPI' : 'Analisis'} · ${widget.width}/3 lebar desktop`,
+              'hrd-widget-subtitle'
             )
           );
-          normalizeOptions(widget.source, selects, widget);
-          const filterSource = select(
-            [
-              ['', 'Tanpa filter kartu'],
-              ...sourceOptions().filter(([key]) => !key.startsWith('ranking:')),
-            ],
-            'filter_source',
-            'Filter khusus kartu'
-          );
-          const filterValue = el('input');
-          filterValue.value = widget.filter_value ?? '';
-          filterValue.maxLength = 3000;
-          filterValue.placeholder = 'Nilai persis, mis. Pria / YA / Normal';
-          filterValue.className =
-            'min-h-11 min-w-0 rounded-xl border border-slate-300 px-3 text-base';
-          filterValue.setAttribute('aria-label', 'Nilai filter kartu');
-          filterValue.addEventListener('change', () => {
-            widget.filter_value = filterValue.value;
-            schedulePreview();
-          });
+          const configure = button('Atur', () => openSettings(index));
+          configure.dataset.hrdSettingsOpen = '';
+          configure.setAttribute('aria-label', `Atur ${widget.title}`);
+          heading.append(title, configure);
+          const actions = el('div', '', 'hrd-widget-actions');
           const preview = el('div');
           preview.dataset.builderPreview = '';
           preview.inert = true;
@@ -1157,45 +1293,154 @@ export function setupHrdDashboard(root) {
               );
               card.dataset.width = widget.width;
               card.dataset.height = widget.height;
-              selects.width.value = String(widget.width);
-              selects.height.value = String(widget.height);
+              useDefault = false;
             };
             const end = () => {
               resize.removeEventListener('pointermove', move);
               resize.removeEventListener('pointerup', end);
               resize.removeEventListener('pointercancel', end);
+              schedulePreview();
             };
             resize.addEventListener('pointermove', move);
             resize.addEventListener('pointerup', end);
             resize.addEventListener('pointercancel', end);
           });
+          const move = (direction) => {
+            const next = index + direction;
+            draft = moveHrdWidget(draft, index, next);
+            previews = moveHrdWidget(previews, index, next);
+            changed();
+            list.children[next]
+              ?.querySelector(direction < 0 ? '[data-move-up]' : '[data-move-down]')
+              ?.focus({ preventScroll: true });
+          };
+          const up = button('↑', () => move(-1));
+          up.dataset.moveUp = '';
+          up.disabled = index === 0;
+          up.setAttribute('aria-label', `Naikkan ${widget.title}`);
+          const down = button('↓', () => move(1));
+          down.dataset.moveDown = '';
+          down.disabled = index === draft.length - 1;
+          down.setAttribute('aria-label', `Turunkan ${widget.title}`);
           actions.append(
             handle,
-            button('↑', () => {
-              draft = moveHrdWidget(draft, index, index - 1);
-              renderDraft();
-              schedulePreview();
-            }),
-            button('↓', () => {
-              draft = moveHrdWidget(draft, index, index + 1);
-              renderDraft();
-              schedulePreview();
-            }),
+            up,
+            down,
             button('Hapus', () => {
               draft.splice(index, 1);
-              renderDraft();
-              schedulePreview();
+              previews.splice(index, 1);
+              changed();
+              list.children[Math.min(index, draft.length - 1)]
+                ?.querySelector('[data-hrd-settings-open]')
+                ?.focus({ preventScroll: true });
             }),
             resize
           );
-          card.append(title, controls, filterSource, filterValue, preview, actions);
+          card.append(heading, preview, actions);
           return card;
         })
       );
+      const addCard = button(
+        '＋ Tambah widget',
+        () => {
+          renderCatalog();
+          catalog.showModal();
+        },
+        'hrd-add-card'
+      );
+      list.append(addCard);
+      status.textContent = `${draft.length} widget · ${dirty() ? 'Perubahan belum disimpan' : 'Belum ada perubahan'}`;
+    };
+    const openSettings = (index) => {
+      selectedWidget = index;
+      const widget = draft[index];
+      fillOptions(fields.source, sourceOptions(), widget.source);
+      if (!sources.some((source) => source.id === widget.source)) {
+        fields.source.append(
+          Object.assign(el('option', 'Sumber lama · tidak tersedia'), { value: widget.source })
+        );
+        fields.source.value = widget.source;
+      }
+      fillOptions(fields.dimension, dimensionOptions(), widget.dimension ?? '');
+      fillOptions(
+        fields.filter_source,
+        [
+          ['', 'Tanpa filter khusus'],
+          ...sourceOptions().filter(
+            ([id]) => !id.startsWith('stat:') && !id.startsWith('ranking:')
+          ),
+        ],
+        widget.filter_source ?? ''
+      );
+      fillOptions(fields.chart, chartOptions, widget.chart);
+      fillOptions(fields.metric, metricOptions, widget.metric);
+      for (const name of ['title', 'width', 'height', 'filter_value'])
+        fields[name].value = widget[name] ?? '';
+      normalizeOptions(widget.source, fields);
+      settings.showModal();
+    };
+    const renderCatalog = () => {
+      const matching = filterHrdCatalog(sources, search.value, category.value);
+      catalogList.replaceChildren();
+      root.querySelector('[data-hrd-catalog-count]').textContent =
+        `${matching.length} widget tersedia · ${draft.length} di dashboard`;
+      matching.forEach((source) => {
+        const card = el('article', '', 'hrd-catalog-card');
+        const info = el('div', '', 'min-w-0 flex-1');
+        info.append(
+          el('h3', source.title, 'break-words text-sm font-semibold text-slate-800'),
+          el(
+            'p',
+            `${source.group}${source.unit ? ` · ${source.unit}` : ''}`,
+            'mt-1 break-words text-xs text-slate-500'
+          )
+        );
+        const count = draft.filter((widget) => widget.source === source.id).length;
+        if (count)
+          info.append(el('p', `${count} ditambahkan`, 'mt-1 text-xs font-medium text-emerald-700'));
+        const addButton = button(
+          '＋',
+          () => {
+            if (saving || draft.length >= 200) return;
+            draft.push(createHrdWidget(source));
+            previews.push(null);
+            useDefault = false;
+            renderDraft();
+            schedulePreview();
+            renderCatalog();
+            [...catalogList.children]
+              .find((entry) => entry.dataset.source === source.id)
+              ?.querySelector('button')
+              ?.focus({ preventScroll: true });
+          },
+          'hrd-catalog-add'
+        );
+        addButton.setAttribute('aria-label', `Tambah ${source.title}`);
+        addButton.disabled = saving || draft.length >= 200;
+        const icon = el(
+          'span',
+          source.kind === 'kpi' ? '#' : source.kind === 'text' ? '≡' : '▥',
+          'hrd-catalog-icon'
+        );
+        icon.setAttribute('aria-hidden', 'true');
+        card.dataset.source = source.id;
+        card.append(icon, info, addButton);
+        catalogList.append(card);
+      });
+      if (!matching.length)
+        catalogList.append(
+          el(
+            'p',
+            'Tidak ada widget yang cocok. Coba kata kunci atau kategori lain.',
+            'py-10 text-center text-sm leading-6 text-slate-500'
+          )
+        );
     };
     root.querySelector('[data-hrd-builder-open]').addEventListener('click', () => {
+      data = getData();
       if (!data) return;
       editing = true;
+      onStart();
       poller.pause();
       draft = data.layout.map((widget) => ({
         ...widget,
@@ -1203,106 +1448,198 @@ export function setupHrdDashboard(root) {
         filter_source: widget.filter_source ?? '',
         filter_value: widget.filter_value ?? '',
       }));
-      previews = data.widgets;
+      previews = [...data.widgets];
       sources = data.builder_sources ?? data.sources;
-      status.textContent = '';
-      fillOptions(add.elements.namedItem('source'), sourceOptions(), sources[0]?.id);
-      fillOptions(add.elements.namedItem('dimension'), dimensionOptions(), '');
-      normalizeOptions(add.elements.namedItem('source').value, {
-        chart: add.elements.namedItem('chart'),
-        metric: add.elements.namedItem('metric'),
-        dimension: add.elements.namedItem('dimension'),
-      });
+      originalDraft = JSON.stringify(draft);
+      useDefault = false;
+      root.dataset.editing = 'true';
+      builder.hidden = false;
+      root.querySelector('[data-hrd-builder-open]').hidden = true;
+      root
+        .querySelectorAll(
+          '[data-hrd-filters] input, [data-hrd-filters] select, [data-hrd-filters] button, [data-hrd-company]'
+        )
+        .forEach((node) => {
+          node.disabled = true;
+        });
+      fillOptions(
+        category,
+        [
+          ['', 'Semua kategori'],
+          ...[...new Set(sources.map((source) => source.group))].map((group) => [group, group]),
+        ],
+        ''
+      );
+      search.value = '';
+      renderCatalog();
       renderDraft();
-      builder.showModal();
-      schedulePreview();
+      builder.scrollIntoView?.({ block: 'nearest' });
     });
     ['source', 'metric'].forEach((field) =>
       add.elements
         .namedItem(field)
-        .addEventListener('change', () =>
-          normalizeOptions(add.elements.namedItem('source').value, {
-            chart: add.elements.namedItem('chart'),
-            metric: add.elements.namedItem('metric'),
-            dimension: add.elements.namedItem('dimension'),
-          })
-        )
+        .addEventListener('change', () => normalizeOptions(fields.source.value, fields))
     );
-    builder
-      .querySelector('[data-hrd-builder-close]')
-      .addEventListener('click', () => builder.close());
-    builder.addEventListener('cancel', (event) => {
-      if (saving) event.preventDefault();
+    builder.querySelector('[data-hrd-builder-close]').addEventListener('click', () => {
+      if (saving) return;
+      if (dirty())
+        ask(
+          'Batalkan perubahan?',
+          'Perubahan dashboard yang belum disimpan akan dibuang. Dashboard tersimpan Anda tetap digunakan.',
+          () => finishEditing()
+        );
+      else finishEditing();
     });
-    builder.addEventListener('close', () => {
+    finishEditing = (resume = true) => {
       editing = false;
       previewVersion++;
       previewRequest?.abort();
       window.clearTimeout(previewTimer);
-      widgetSignature = null;
-      if (data) renderWidgets();
-      poller.resume();
-    });
+      builder.hidden = true;
+      root.dataset.editing = 'false';
+      root.querySelector('[data-hrd-builder-open]').hidden = false;
+      root
+        .querySelectorAll(
+          '[data-hrd-filters] input, [data-hrd-filters] select, [data-hrd-filters] button, [data-hrd-company]'
+        )
+        .forEach((node) => {
+          node.disabled = false;
+        });
+      grid.replaceChildren();
+      onFinish();
+      root.querySelector('[data-hrd-builder-open]').focus({ preventScroll: true });
+      if (resume) poller.resume();
+    };
     add.addEventListener('submit', (event) => {
       event.preventDefault();
-      const source = sources.find((item) => item.id === add.elements.namedItem('source').value);
-      if (!source) return;
-      if (draft.length >= 200) {
-        status.textContent = 'Maksimal 200 kartu.';
-        return;
-      }
-      draft.push({
-        source: source.id,
-        title: add.elements.namedItem('title').value || source.title,
-        dimension: add.elements.namedItem('dimension').value,
-        filter_source: '',
-        filter_value: '',
-        chart: add.elements.namedItem('chart').value,
-        metric: add.elements.namedItem('metric').value,
-        width: Number(add.elements.namedItem('width').value),
-        height: 1,
-      });
+      if (saving || !draft[selectedWidget] || !add.reportValidity()) return;
+      draft[selectedWidget] = Object.fromEntries(
+        Object.entries(fields).map(([key, field]) => [
+          key,
+          ['width', 'height'].includes(key) ? Number(field.value) : field.value,
+        ])
+      );
+      previews[selectedWidget] = null;
+      useDefault = false;
+      settings.close();
       renderDraft();
       schedulePreview();
+      list.children[selectedWidget]
+        ?.querySelector('[data-hrd-settings-open]')
+        ?.focus({ preventScroll: true });
     });
     builder.querySelector('[data-hrd-builder-default]').addEventListener('click', () => {
-      draft = [];
-      previews = [];
-      renderDraft();
-      status.textContent = 'Simpan untuk menggunakan kartu default otomatis.';
+      ask(
+        'Kembalikan tampilan awal?',
+        'Susunan pribadi akan dikembalikan ke dashboard bawaan sesuai hak akses Anda. Perubahan baru disimpan setelah menekan Simpan dashboard.',
+        () => {
+          useDefault = true;
+          schedulePreview();
+          status.textContent = 'Menyiapkan tampilan awal…';
+        }
+      );
     });
     builder.querySelector('[data-hrd-builder-save]').addEventListener('click', async (event) => {
       if (saving) return;
       saving = true;
       previewRequest?.abort();
       window.clearTimeout(previewTimer);
-      const controls = [...builder.querySelectorAll('button, input, select')];
+      const controls = [
+        ...builder.querySelectorAll('button, input, select'),
+        ...grid.querySelectorAll('button'),
+      ];
       controls.forEach((control) => {
         control.disabled = true;
       });
       status.textContent = 'Menyimpan…';
+      let saveError;
       try {
-        await request(`${root.dataset.layoutUrl}?company=${root.dataset.company}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ widgets: draft }),
-        });
-        builder.close();
+        await request(
+          `${root.dataset.layoutUrl}${root.dataset.company ? '?company=' + encodeURIComponent(root.dataset.company) : ''}`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ widgets: useDefault ? [] : draft, use_default: useDefault }),
+          }
+        );
+        finishEditing();
+        const layoutNote = root.querySelector('[data-hrd-layout-note]');
+        if (layoutNote) layoutNote.textContent = 'Dashboard pribadi berhasil disimpan.';
       } catch (exception) {
-        status.textContent = exception.message;
+        if (exception.revoked) handleDataError(exception);
+        saveError = exception.message;
       } finally {
         saving = false;
-        controls.forEach((control) => {
-          control.disabled = false;
-        });
+        if (editing) {
+          renderDraft();
+          status.textContent = `${saveError} Perubahan belum disimpan; Anda dapat mencoba lagi.`;
+        }
+        controls
+          .slice(0, builder.querySelectorAll('button, input, select').length)
+          .forEach((control) => {
+            control.disabled = false;
+          });
+      }
+    });
+    root.querySelector('[data-hrd-catalog-open]').addEventListener('click', () => {
+      renderCatalog();
+      catalog.showModal();
+    });
+    ['[data-hrd-catalog-close]', '[data-hrd-catalog-done]'].forEach((selector) =>
+      root.querySelector(selector).addEventListener('click', () => catalog.close())
+    );
+    search.addEventListener('input', renderCatalog);
+    category.addEventListener('change', renderCatalog);
+    root
+      .querySelector('[data-hrd-settings-close]')
+      .addEventListener('click', () => settings.close());
+    root
+      .querySelector('[data-hrd-builder-confirm-cancel]')
+      .addEventListener('click', () => confirmation.close());
+    root.querySelector('[data-hrd-builder-confirm-accept]').addEventListener('click', () => {
+      const action = confirmedAction;
+      confirmation.close();
+      action?.();
+    });
+    [catalog, settings, confirmation].forEach((dialog) => {
+      dialog.addEventListener('click', (event) => {
+        if (event.target !== dialog) return;
+        const rect = dialog.getBoundingClientRect();
+        if (
+          event.clientX < rect.left ||
+          event.clientX > rect.right ||
+          event.clientY < rect.top ||
+          event.clientY > rect.bottom
+        )
+          dialog.close();
+      });
+    });
+    catalog.addEventListener('close', () =>
+      root.querySelector('[data-hrd-catalog-open]').focus({ preventScroll: true })
+    );
+    settings.addEventListener('close', () =>
+      list.children[selectedWidget]
+        ?.querySelector('[data-hrd-settings-open]')
+        ?.focus({ preventScroll: true })
+    );
+    window.addEventListener('beforeunload', (event) => {
+      if (editing && dirty()) {
+        event.preventDefault();
+        event.returnValue = '';
       }
     });
   }
   window.addEventListener('pagehide', () => poller.pause());
+  root.addEventListener('keydown', () => {
+    root.dataset.keyboard = 'true';
+  });
+  root.addEventListener('pointerdown', () => {
+    root.dataset.keyboard = 'false';
+  });
   window.addEventListener('pageshow', (event) => {
     if (event.persisted && !editing) poller.resume();
   });
-  return { poller };
+  return { poller, close: (resume = true) => finishEditing(resume) };
 }
 
 if (typeof document !== 'undefined') {

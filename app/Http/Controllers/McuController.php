@@ -11,6 +11,7 @@ use App\Models\RencanaKunjungan;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -23,11 +24,22 @@ class McuController extends Controller
 {
     public function index(Request $request): View|RedirectResponse
     {
-        if ($request->user()->role === 'hrd') {
-            return redirect()->route('hrd.index');
+        if ($request->user()->role === 'hrd' || $request->filled('company')) {
+            Gate::authorize('view-hrd');
+            $data = $request->validate(['company' => ['nullable', 'uuid']]);
+            if ($request->user()->role === 'hrd') {
+                abort_if(isset($data['company']) && $data['company'] !== $request->user()->perusahaan_id, 404);
+                $company = $request->user()->perusahaan()->firstOrFail();
+            } else {
+                $company = Perusahaan::findOrFail($data['company']);
+            }
+
+            return view('mcu.hrd-dashboard', ['company' => $company, 'companies' => $request->user()->role === 'admin' ? Perusahaan::orderBy('nama_perusahaan')->get() : collect(),
+                'visits' => $company->rencanaKunjungans()->with('pakets')->latest()->get(), 'canBuild' => true]);
         }
 
         return view('mcu.index', [
+            'companies' => $request->user()->role === 'admin' ? Perusahaan::orderBy('nama_perusahaan')->get(['id', 'nama_perusahaan']) : collect(),
             'kunjungans' => RencanaKunjungan::with('perusahaan')->withCount(['pakets', 'karyawans'])->latest()->limit(5)->get(),
             'stats' => [
                 'perusahaan' => Perusahaan::count(),

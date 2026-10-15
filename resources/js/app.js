@@ -13,6 +13,7 @@ import './mcu-report';
 import './user-management';
 import './account-menu';
 import './hrd-dashboard';
+import './dashboard';
 
 const examForm = document.querySelector('[data-exam-form]');
 

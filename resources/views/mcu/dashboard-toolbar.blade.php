@@ -1,0 +1,4 @@
+<section id="hrd-builder" data-hrd-builder hidden class="hrd-edit-toolbar" aria-label="Atur dashboard pribadi">
+    <div><h3 class="font-bold text-blue-950">Mode atur dashboard</h3><p class="mt-1 text-xs leading-5 text-blue-700">Kanvas & pratinjau · seret kartu atau gunakan tombol urutan. Perubahan hanya untuk akun Anda.</p><p data-hrd-builder-status role="status" aria-live="polite" class="mt-2 text-xs font-medium text-blue-800"></p></div>
+    <div class="flex flex-wrap gap-2"><button type="button" data-hrd-builder-default class="hrd-button bg-white">Kembalikan default</button><button type="button" data-hrd-catalog-open class="hrd-button border-blue-200 bg-white font-semibold text-blue-800">＋ Tambah widget</button><button type="button" data-hrd-builder-close class="hrd-button bg-white">Batal</button><button type="button" data-hrd-builder-save class="hrd-primary">Simpan dashboard</button></div>
+</section>
