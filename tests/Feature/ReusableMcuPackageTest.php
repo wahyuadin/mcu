@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Karyawan;
+use App\Models\McuItem;
 use App\Models\Paket;
 use App\Models\RencanaKunjungan;
 use App\Models\User;
@@ -12,6 +13,17 @@ use Tests\TestCase;
 class ReusableMcuPackageTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_package_form_offers_live_search_and_escapes_searchable_item_labels(): void
+    {
+        $item = McuItem::factory()->create(['label' => 'Hemoglobin <b>contoh</b>', 'input_type' => 'text']);
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+
+        $this->get(route('paket.create'))->assertOk()->assertSee('data-package-search', false)->assertSee('Cari pemeriksaan')
+            ->assertSee('data-package-search-status', false)->assertSee('data-package-search-empty', false)->assertSee($item->label)->assertDontSee('<b>contoh</b>', false);
+
+        $this->get(route('paket.edit', Paket::factory()->master()->create()))->assertOk()->assertSee('data-package-search', false);
+    }
 
     public function test_master_can_be_created_without_a_company_or_visit(): void
     {

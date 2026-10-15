@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\ExaminationLabel;
 use App\McuCatalog;
 use App\McuReport;
+use App\MedicalImage;
 use App\Models\Anamnesa;
 use App\Models\Dokter;
 use App\Models\Karyawan;
@@ -31,21 +32,25 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PemeriksaanController extends Controller
 {
-    public function edit(Request $request, RencanaKunjungan $kunjungan, Karyawan $peserta): View|RedirectResponse
+    public function __construct(private MedicalImage $images) {}
+
+    public function edit(Request $request, RencanaKunjungan $kunjungan, Karyawan $peserta): View|Response|RedirectResponse
     {
         $this->assertParticipant($kunjungan, $peserta);
         $peserta->load('paket', 'anamnesa.dokter', 'pasien', 'perusahaan');
         $exam = $peserta->anamnesa ?? new Anamnesa;
+        $hrdReadonly = $request->user()->role === 'hrd';
+        $dashboardContext = $this->dashboardContext($request, $peserta);
         $labelService = new ExaminationLabel;
         $labelTarget = $labelService->navigationTarget($peserta, $exam, $request->query('tab'), $request->query('subcategory'));
-        $readonly = $kunjungan->is_closing || $peserta->is_closing || $exam->status === 'final' || in_array($peserta->status_pemeriksaan, ['batal', 'tidak_hadir'], true);
+        $readonly = $hrdReadonly || $kunjungan->is_closing || $peserta->is_closing || $exam->status === 'final' || in_array($peserta->status_pemeriksaan, ['batal', 'tidak_hadir'], true);
         if (! $readonly && (! $peserta->hasStoredPhoto() || $request->query('tab') === 'foto')) {
             return view('mcu.pemeriksaan-foto', ['kunjungan' => $kunjungan, 'peserta' => $peserta, 'hasPhoto' => $peserta->hasStoredPhoto(), 'labelTarget' => $labelTarget]);
         }
         $selectedDoctors = array_filter([$exam->dokter_id, $exam->dokter_fisik_id, ...array_column($exam->penunjang ?? [], 'doctor_id'), ...array_values($exam->category_doctors ?? [])]);
         $categoryGroups = $exam->categoryGroups($peserta);
         if ($request->query('tab') === 'dinamis') {
-            return redirect()->route('pemeriksaan.edit', [$kunjungan, $peserta, 'tab' => array_key_first($categoryGroups) ?? 'ringkasan']);
+            return redirect()->route('pemeriksaan.edit', [$kunjungan, $peserta, ...$dashboardContext, 'tab' => array_key_first($categoryGroups) ?? 'ringkasan']);
         }
         $progress = $exam->workflowProgress($peserta);
         $tabs = ['ringkasan' => 'Ringkasan', 'identitas' => 'Identitas MCU', 'anamnesa' => 'Anamnesis', 'fisik' => 'Fisik', 'laboratorium' => 'Laboratorium', 'penunjang' => 'Penunjang', 'kesimpulan' => 'Kesimpulan', 'review' => 'Review'];
@@ -83,9 +88,9 @@ class PemeriksaanController extends Controller
             $examinations[$key] = ['label' => $group['name'], 'description' => count($group['items']).' item pemeriksaan', 'status' => $progress[$key]['status'], 'tab' => $key, 'anchor' => null, 'skipped' => false];
         }
 
-        $labelCategories = $tab === 'identitas' ? $labelService->categories($peserta, $exam) : [];
+        $labelCategories = $tab === 'identitas' && ! $hrdReadonly ? $labelService->categories($peserta, $exam) : [];
 
-        return view('mcu.pemeriksaan', [
+        return response()->view('mcu.pemeriksaan', [
             'kunjungan' => $kunjungan, 'peserta' => $peserta, 'exam' => $exam, 'tabs' => $tabs,
             'categoryGroups' => $categoryGroups,
             'reviewSubmission' => $request->boolean('review_submission') && $tab === 'anamnesa' && ! $readonly && $peserta->anamnesa_submission && ! ($peserta->anamnesa_submission['reviewed_at'] ?? null),
@@ -100,12 +105,32 @@ class PemeriksaanController extends Controller
             'physicalGroups' => McuCatalog::physical(), 'laboratoryGroups' => McuCatalog::laboratory(),
             'supportingItems' => McuCatalog::supporting(), 'doctors' => Dokter::where(function ($query) use ($selectedDoctors): void {
                 $query->where('is_active', true)->orWhereIn('id', $selectedDoctors);
-            })->orderBy('nama_dokter')->get(),
+            })->when($hrdReadonly, fn ($query) => $query->withTrashed()->whereIn('id', $selectedDoctors))->orderBy('nama_dokter')->get(),
             'readonly' => $readonly,
-            'checkpoint' => $tab === 'identitas' ? $this->checkpointData($kunjungan, $peserta, $exam) : null,
+            'hrdReadonly' => $hrdReadonly, 'dashboardContext' => $dashboardContext,
+            'dashboardReturnUrl' => route('dashboard', Arr::except($dashboardContext, ['from_dashboard'])).'#hrd-participants',
+            'checkpoint' => $tab === 'identitas' && ! $hrdReadonly ? $this->checkpointData($kunjungan, $peserta, $exam) : null,
             'labelCategories' => $labelCategories,
             'labelBarcodes' => $tab === 'identitas' ? $labelService->barcodes($peserta, $labelCategories) : null,
-        ]);
+        ])->header('Cache-Control', 'private, no-store');
+    }
+
+    /** @return array<string, mixed> */
+    private function dashboardContext(Request $request, Karyawan $peserta): array
+    {
+        $data = $request->validate(['from_dashboard' => ['nullable', 'boolean'], 'dashboard' => ['nullable', 'string', 'max:100'],
+            'company' => ['nullable', 'uuid'], 'visit' => ['nullable', 'uuid'], 'visit_status' => ['nullable', Rule::in(['draft', 'ongoing', 'completed', 'closed'])]]);
+        if (! $request->boolean('from_dashboard') && $request->user()->role !== 'hrd') {
+            return [];
+        }
+        if ($request->user()->role === 'hrd') {
+            $data['company'] = $peserta->perusahaan_id;
+            if (! empty($data['visit'])) {
+                abort_unless(RencanaKunjungan::where('perusahaan_id', $peserta->perusahaan_id)->whereKey($data['visit'])->exists(), 404);
+            }
+        }
+
+        return ['from_dashboard' => 1, ...Arr::except($data, ['from_dashboard'])];
     }
 
     public function labels(Request $request, RencanaKunjungan $kunjungan, Karyawan $peserta): Response|RedirectResponse
@@ -222,7 +247,7 @@ class PemeriksaanController extends Controller
                 } elseif ($section === 'laboratorium') {
                     $this->saveLaboratory($request, $peserta, $exam, $storedAttachments);
                 } elseif ($section === 'penunjang') {
-                    $this->saveSupporting($request, $peserta, $exam);
+                    $this->saveSupporting($request, $peserta, $exam, $storedAttachments);
                 } elseif ($section === 'kesimpulan') {
                     $exam->fill($request->validate([
                         'catatan_dokter' => ['nullable', 'string', 'max:5000'], 'anjuran_saran' => ['nullable', 'string', 'max:5000'],
@@ -315,6 +340,7 @@ class PemeriksaanController extends Controller
     public function attachment(Request $request, RencanaKunjungan $kunjungan, Karyawan $peserta, string $item): StreamedResponse
     {
         $this->assertParticipant($kunjungan, $peserta);
+        abort_if($request->user()->role === 'hrd' && $request->has('version'), 404);
         if (str_starts_with($item, 'dynamic-')) {
             $id = substr($item, 8);
             $exam = $peserta->anamnesa;
@@ -355,14 +381,15 @@ class PemeriksaanController extends Controller
         return Storage::disk('local')->response($path, null, ['Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff']);
     }
 
-    public function report(RencanaKunjungan $kunjungan, Karyawan $peserta, McuReport $report): View
+    public function report(Request $request, RencanaKunjungan $kunjungan, Karyawan $peserta, McuReport $report): Response
     {
         $this->assertParticipant($kunjungan, $peserta);
         $peserta->load('anamnesa.dokter', 'anamnesa.dokterFisik', 'perusahaan', 'paket');
 
         $exam = $peserta->anamnesa ?? new Anamnesa;
 
-        return view('mcu.laporan', ['peserta' => $peserta, 'exam' => $exam, 'sections' => $report->sections($peserta, $exam), 'doctors' => Dokter::withTrashed()->pluck('nama_dokter', 'id')]);
+        return response()->view('mcu.laporan', ['peserta' => $peserta, 'exam' => $exam, 'sections' => $report->sections($peserta, $exam), 'doctors' => Dokter::withTrashed()->pluck('nama_dokter', 'id'),
+            'dashboardContext' => $this->dashboardContext($request, $peserta)])->header('Cache-Control', 'private, no-store');
     }
 
     private function saveHistory(Request $request, Karyawan $participant, Anamnesa $exam): void
@@ -428,12 +455,18 @@ class PemeriksaanController extends Controller
                 continue;
             }
             $file = $request->file('dynamic_files.'.$id);
-            $path = $file->store('mcu/'.$participant->id.'/dynamic', 'local');
-            if (! $path) {
-                throw ValidationException::withMessages(['dynamic_files.'.$id => 'Lampiran gagal disimpan. Silakan coba kembali.']);
+            if ($file->getMimeType() === 'application/pdf') {
+                $path = $file->store('mcu/'.$participant->id.'/dynamic', 'local');
+                if (! $path) {
+                    throw ValidationException::withMessages(['dynamic_files.'.$id => 'Lampiran gagal disimpan. Silakan coba kembali.']);
+                }
+                $storedAttachments[] = $path;
+                $attachments[$id] = ['path' => $path, 'mime' => 'application/pdf'];
+            } else {
+                $attachment = $this->images->store($file, $participant, 'mcu/'.$participant->id.'/dynamic', 'dynamic_files.'.$id);
+                array_push($storedAttachments, $attachment['path'], $attachment['original_path']);
+                $attachments[$id] = $attachment;
             }
-            $storedAttachments[] = $path;
-            $attachments[$id] = ['path' => $path, 'mime' => $file->getMimeType()];
         }
         $exam->dynamic_attachments = $attachments;
     }
@@ -494,7 +527,8 @@ class PemeriksaanController extends Controller
         $exam->laboratorium = array_replace($exam->laboratorium ?? [], $data);
     }
 
-    private function saveSupporting(Request $request, Karyawan $participant, Anamnesa $exam): void
+    /** @param list<string> $storedAttachments */
+    private function saveSupporting(Request $request, Karyawan $participant, Anamnesa $exam, array &$storedAttachments): void
     {
         $rules = [];
         foreach (McuCatalog::supporting() as $key => $item) {
@@ -522,7 +556,11 @@ class PemeriksaanController extends Controller
         }
         foreach (array_keys(McuCatalog::supporting()) as $key) {
             if ($exam->includes($participant, $key) && $request->hasFile('images.'.$key)) {
-                $rows[$key]['attachment'] = $this->storeImage($request, 'images.'.$key, $participant);
+                $attachment = $this->images->store($request->file('images.'.$key), $participant, 'mcu/'.$participant->id, 'images.'.$key);
+                array_push($storedAttachments, $attachment['path'], $attachment['original_path']);
+                $rows[$key]['attachment'] = $attachment['path'];
+                $rows[$key]['attachment_mime'] = $attachment['mime'];
+                $rows[$key]['original_attachment'] = $attachment['original_path'];
             }
         }
         $exam->penunjang = $rows;
@@ -548,16 +586,6 @@ class PemeriksaanController extends Controller
         if ($errors !== []) {
             throw ValidationException::withMessages(['kelengkapan' => $errors]);
         }
-    }
-
-    private function storeImage(Request $request, string $field, Karyawan $participant): string
-    {
-        $path = $request->file($field)->store('mcu/'.$participant->id, 'local');
-        if (! $path) {
-            throw ValidationException::withMessages([$field => 'Gambar gagal disimpan. Silakan coba lagi.']);
-        }
-
-        return $path;
     }
 
     public function savePhoto(Request $request, RencanaKunjungan $kunjungan, Karyawan $peserta, PatientPhoto $photos): RedirectResponse

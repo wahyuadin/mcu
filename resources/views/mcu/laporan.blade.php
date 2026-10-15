@@ -10,7 +10,7 @@
 </head>
 <body>
     <div class="print-controls">
-        <a href="{{ route('pemeriksaan.edit', [$peserta->rencana_kunjungan_id, $peserta, 'tab' => 'review']) }}">← Review hasil</a>
+        <a href="{{ route('pemeriksaan.edit', [$peserta->rencana_kunjungan_id, $peserta, ...($dashboardContext ?? []), 'tab' => 'review']) }}">← Review hasil</a>
         <button type="button" data-report-print disabled>Cetak / Simpan PDF</button>
         <p data-report-status>Menyiapkan halaman A4… Gunakan skala 100%, tanpa header/footer browser.</p>
         @isset($historicalVersion)<p>Laporan versi {{ $historicalVersion }} · {{ $revisionNote }}</p>@endisset

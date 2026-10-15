@@ -15,23 +15,103 @@ test(
   async (t) => {
     const html = await readFile(join(fixtures, 'dashboard.html'), 'utf8');
     const data = JSON.parse(await readFile(join(fixtures, 'data.json'), 'utf8'));
+    const workspace = JSON.parse(await readFile(join(fixtures, 'workspace.json'), 'utf8'));
+    const readonlyHtml = await readFile(join(fixtures, 'readonly-examination.html'), 'utf8');
+    const csv = await readFile(join(fixtures, 'Rekap_MCU.csv'));
+    const participantPhoto = await readFile(join(fixtures, 'participant-photo.webp'));
+    let csvRequests = 0;
+    const dashboards = [];
+    let defaultDashboard = workspace.default_dashboard ?? {
+      id: 'default',
+      name: 'Dashboard',
+      version: 1,
+    };
+    const scopeRequests = [];
+    let active = 'default';
     let origin;
     let dataRequests = 0;
     let writes = 0;
     const server = createServer(async (request, response) => {
       const path = new URL(request.url, 'http://localhost').pathname;
-      if (path === '/') {
+      if (path === '/' || path === '/dashboard' || path.endsWith('/pemeriksaan')) {
         response.setHeader('Content-Type', 'text/html');
-        response.end(html.replaceAll(/https?:\/\/localhost(?::8000)?/g, origin));
+        response.end(
+          (path.endsWith('/pemeriksaan') ? readonlyHtml : html).replaceAll(
+            /https?:\/\/localhost(?::8000)?/g,
+            origin
+          )
+        );
+        return;
+      }
+      if (path.endsWith('/lampiran/foto')) {
+        response.writeHead(200, { 'Content-Type': 'image/webp' });
+        response.end(participantPhoto);
+        return;
+      }
+      if (path === '/dashboard/data') {
+        dataRequests++;
+        const query = new URL(request.url, 'http://localhost').searchParams;
+        scopeRequests.push(query.toString());
+        const matching =
+          !query.get('visit_status') ||
+          query.get('visit_status') === workspace.visit_options[0].status;
+        const selected =
+          new URL(request.url, 'http://localhost').searchParams.get('dashboard') ?? active;
+        const dashboard = dashboards.find((entry) => entry.id === selected);
+        response.setHeader('Content-Type', 'application/json');
+        response.end(
+          JSON.stringify({
+            ...workspace,
+            default_dashboard: defaultDashboard,
+            stats: matching
+              ? workspace.stats
+              : Object.fromEntries(Object.keys(workspace.stats).map((key) => [key, 0])),
+            recent_visits: matching ? workspace.recent_visits : [],
+            active_dashboard: selected,
+            dashboard: dashboard ?? null,
+            dashboards,
+            personal_layout: Boolean(dashboard),
+            layout: dashboard?.widgets ?? workspace.layout,
+            widgets:
+              dashboard?.widgets.map((widget) => ({
+                ...(workspace.widgets.find((entry) => entry.source === widget.source) ?? {
+                  kind: 'choice',
+                  rows: [],
+                  total: 0,
+                }),
+                ...widget,
+              })) ?? workspace.widgets,
+            updated_at: new Date().toISOString(),
+          })
+        );
         return;
       }
       if (path === '/hrd/data') {
         dataRequests++;
         response.setHeader('Content-Type', 'application/json');
-        response.end(JSON.stringify({ ...data, updated_at: new Date().toISOString() }));
+        response.end(
+          JSON.stringify({ ...data, updated_at: new Date().toISOString() }).replaceAll(
+            /https?:\/\/localhost(?::8000)?/g,
+            origin
+          )
+        );
         return;
       }
-      if (path === '/hrd/preview') {
+      if (path === '/hrd/rekap') {
+        csvRequests++;
+        if (csvRequests === 1) {
+          response.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '1' });
+          response.end('{"message":"Too Many Attempts."}');
+        } else {
+          response.writeHead(200, {
+            'Content-Type': 'text/csv; charset=UTF-8',
+            'Content-Disposition': 'attachment; filename=Rekap_MCU.csv',
+          });
+          response.end(csv);
+        }
+        return;
+      }
+      if (path === '/dashboard/preview') {
         const chunks = [];
         for await (const chunk of request) chunks.push(chunk);
         const widgets = JSON.parse(Buffer.concat(chunks).toString()).widgets;
@@ -40,7 +120,9 @@ test(
           JSON.stringify({
             ...data,
             widgets: widgets.map((widget) => ({
-              ...(data.widgets.find((row) => row.source === widget.source) ?? {
+              ...([...workspace.widgets, ...data.widgets].find(
+                (row) => row.source === widget.source
+              ) ?? {
                 rows: [],
                 total: 0,
               }),
@@ -50,10 +132,32 @@ test(
         );
         return;
       }
-      if (path === '/hrd/layout') {
+      if (path.startsWith('/dashboard/saved')) {
         writes++;
+        const chunks = [];
+        for await (const chunk of request) chunks.push(chunk);
+        const body = JSON.parse(Buffer.concat(chunks).toString());
+        let dashboard;
+        if (request.method === 'POST') {
+          dashboard = { ...body, id: `dashboard-${dashboards.length + 1}`, version: 1 };
+          dashboards.push(dashboard);
+        } else {
+          dashboard = path.endsWith('/default')
+            ? defaultDashboard
+            : dashboards.find((entry) => entry.id === path.split('/').at(-1));
+          Object.assign(dashboard, body, { version: dashboard.version + 1 });
+        }
+        if (dashboard.id !== 'default') active = dashboard.id;
         response.setHeader('Content-Type', 'application/json');
-        response.end('{"message":"Saved"}');
+        response.end(JSON.stringify({ dashboard }));
+        return;
+      }
+      if (path === '/dashboard/selection') {
+        const chunks = [];
+        for await (const chunk of request) chunks.push(chunk);
+        active = JSON.parse(Buffer.concat(chunks).toString()).dashboard;
+        response.setHeader('Content-Type', 'application/json');
+        response.end('{"message":"Selected"}');
         return;
       }
       if (path === '/favicon.ico') {
@@ -171,11 +275,12 @@ test(
       const { targetId } = await command('Target.createTarget', { url: 'about:blank' });
       const { sessionId } = await command('Target.attachToTarget', { targetId, flatten: true });
       const page = (method, params) => command(method, params, sessionId);
+      await command('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: profile });
       await page('Page.enable');
       await page('Runtime.enable');
       const evaluate = async (expression) => {
         const response = await page('Runtime.evaluate', {
-          expression,
+          expression: `(() => eval(${JSON.stringify(expression)}))()`,
           returnByValue: true,
           awaitPromise: true,
         });
@@ -205,27 +310,137 @@ test(
         mobile: false,
       });
       await page('Page.navigate', { url: origin });
-      await waitFor("document.querySelector('[data-hrd-stat=planned]')?.textContent === '529'");
+      await waitFor(
+        "document.querySelector('[data-dashboard-stat=peserta]')?.textContent === '1' && !document.querySelector('[data-hrd-builder-open]').disabled"
+      );
       assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
       await screenshot('dashboard-desktop.png');
-      const requestsBefore = dataRequests;
+      await evaluate("document.querySelector('[data-dashboard-rename]').click()");
+      await waitFor("document.querySelector('[data-dashboard-name-dialog]').open");
       await evaluate(
-        "window.__hrdRow = document.querySelector('[data-hrd-participants] tr'); const box = window.__hrdRow.querySelector('input'); box.checked = true; box.dispatchEvent(new Event('change')); box.focus(); window.scrollTo(0, 400); window.__hrdScroll = scrollY"
+        "const form=document.querySelector('[data-dashboard-name-form]');form.elements.name.value='Dashboard saya';form.requestSubmit()"
       );
       await waitFor(
-        `document.querySelector('[data-hrd-updated]').textContent !== '' && ${requestsBefore + 1} <= performance.getEntriesByType('resource').filter(r => r.name.includes('/hrd/data')).length`
+        "document.querySelector('[data-dashboard-select]').selectedOptions[0].textContent==='Dashboard saya'"
+      );
+      const differentStatus = workspace.visit_options[0].status === 'draft' ? 'closed' : 'draft';
+      await evaluate(
+        `const select=document.querySelector('[data-dashboard-visit-status]');select.value=${JSON.stringify(differentStatus)};select.dispatchEvent(new Event('change'))`
+      );
+      await waitFor("document.querySelector('[data-dashboard-stat=peserta]').textContent==='0'");
+      assert.ok(scopeRequests.some((query) => query.includes(`visit_status=${differentStatus}`)));
+      await evaluate(
+        "document.querySelector('[data-dashboard-filter-reset]').click();const select=document.querySelector('[data-dashboard-context]');select.value=" +
+          JSON.stringify(workspace.company.id) +
+          ";select.dispatchEvent(new Event('change'))"
+      );
+      await waitFor("document.querySelector('[data-dashboard-stat=peserta]').textContent==='1'");
+      const requestsBefore = dataRequests;
+      await evaluate(
+        "window.__hrdRow = document.querySelector('[data-dashboard-visits] tr'); window.__hrdRow.querySelector('a').focus(); window.scrollTo(0, 200); window.__hrdScroll = scrollY"
+      );
+      await waitFor(
+        `${requestsBefore + 1} <= performance.getEntriesByType('resource').filter(r => r.name.includes('/dashboard/data')).length`
       );
       assert.equal(
         await evaluate(
-          "window.__hrdRow === document.querySelector('[data-hrd-participants] tr') && window.__hrdRow.querySelector('input').checked && scrollY === window.__hrdScroll"
+          "window.__hrdRow === document.querySelector('[data-dashboard-visits] tr') && scrollY === window.__hrdScroll"
         ),
         true
       );
-      await evaluate("document.querySelector('[data-hrd-builder-open]').click()");
-      await waitFor("document.querySelector('[data-hrd-builder-list]').children.length > 0");
+      await evaluate("document.querySelector('[data-dashboard-reports]').open=true");
+      await waitFor("document.querySelector('[data-hrd-participants] tr input')");
       assert.equal(
         await evaluate(
-          "const d=document.querySelector('[data-hrd-builder]'); d.scrollWidth <= d.clientWidth && d.getBoundingClientRect().height <= innerHeight * .91"
+          "document.querySelector('[data-hrd-participants] tr a').href.includes('/pemeriksaan')"
+        ),
+        true
+      );
+      await evaluate(
+        "const create=URL.createObjectURL;URL.createObjectURL=blob=>{window.__csvBlob=blob;return create(blob)};document.querySelector('[data-hrd-recap]').click()"
+      );
+      await waitFor(
+        "document.querySelector('[data-hrd-recap]').disabled && document.querySelector('[data-hrd-recap]').textContent.includes('detik')"
+      );
+      await waitFor("!document.querySelector('[data-hrd-recap]').disabled");
+      assert.equal(csvRequests, 1);
+      await evaluate("document.querySelector('[data-hrd-recap]').click()");
+      await waitFor("window.__csvBlob && !document.querySelector('[data-hrd-recap]').disabled");
+      assert.equal(
+        await evaluate("window.__csvBlob.text().then(text=>text.startsWith('sep=;\\r\\n'))"),
+        true
+      );
+      assert.equal(csvRequests, 2);
+      await evaluate(
+        "const box=document.querySelector('[data-hrd-participants] tr input');box.checked=true;box.dispatchEvent(new Event('change'))"
+      );
+      assert.match(
+        await evaluate("document.querySelector('[data-hrd-selected]').textContent"),
+        /1 peserta/
+      );
+      await evaluate("document.querySelector('[data-dashboard-reports]').open=false");
+      await evaluate("document.querySelector('[data-hrd-builder-open]').click()");
+      await waitFor("document.querySelector('[data-dashboard-widgets] .hrd-builder-card')");
+      assert.equal(
+        await evaluate(
+          "[...document.querySelectorAll('[data-dashboard-widgets] button')].some(node=>['⠿ Seret','↑','↓','↔ Ukuran'].includes(node.textContent))"
+        ),
+        false
+      );
+      const dragPoints = await evaluate(
+        "const cards=document.querySelectorAll('[data-hrd-edit-index]');window.__draggedCard=cards[0];const a=cards[0].getBoundingClientRect(),b=cards[1].getBoundingClientRect();({from:{x:a.left+30,y:a.top+50},to:{x:b.left+60,y:b.top+50}})"
+      );
+      await page('Input.dispatchMouseEvent', {
+        type: 'mousePressed',
+        button: 'left',
+        clickCount: 1,
+        ...dragPoints.from,
+      });
+      await page('Input.dispatchMouseEvent', {
+        type: 'mouseMoved',
+        button: 'left',
+        buttons: 1,
+        ...dragPoints.to,
+      });
+      await waitFor(
+        "document.querySelector('[data-hrd-edit-index]')!==window.__draggedCard && document.querySelector('.hrd-drag-ghost')"
+      );
+      assert.equal(
+        await evaluate(
+          "document.querySelector('.hrd-drag-ghost').style.transform.includes('translate')"
+        ),
+        true
+      );
+      await screenshot('drag-desktop.png');
+      await page('Input.dispatchMouseEvent', {
+        type: 'mouseReleased',
+        button: 'left',
+        clickCount: 1,
+        ...dragPoints.to,
+      });
+      await waitFor("!document.querySelector('.hrd-drag-ghost')");
+      await evaluate("document.querySelector('[data-dashboard-undo]').click()");
+      await waitFor(
+        "document.querySelector('[data-hrd-edit-index] .hrd-widget-title').textContent==='Perusahaan'"
+      );
+      await evaluate(
+        "document.querySelector('[data-dashboard-redo]').click();document.querySelector('[data-dashboard-undo]').click()"
+      );
+      await evaluate(
+        'Promise.all(document.getAnimations().map(animation=>animation.finished.catch(()=>{})))'
+      );
+      await evaluate(
+        "document.querySelector('[data-hrd-settings-open]').click(); const field=document.querySelector('[data-hrd-widget-form] input[name=title]'); field.value='Live edit'; field.dispatchEvent(new Event('input',{bubbles:true}))"
+      );
+      assert.equal(
+        await evaluate(
+          "document.querySelector('[data-dashboard-widgets] .hrd-widget-title').textContent"
+        ),
+        'Live edit'
+      );
+      assert.equal(
+        await evaluate(
+          "const d=document.querySelector('[data-dashboard-editor]'); d.scrollWidth <= d.clientWidth"
         ),
         true
       );
@@ -254,14 +469,39 @@ test(
       });
       assert.equal(
         await evaluate(
-          "document.querySelector('[data-hrd-builder-list]').firstElementChild.dataset.width"
+          "document.querySelector('[data-dashboard-widgets]').firstElementChild.dataset.width"
         ),
         '2'
       );
-      await screenshot('builder-desktop.png');
-      await evaluate(
-        "document.querySelector('[data-hrd-builder-close]').click(); window.scrollTo(0,0)"
+      assert.equal(
+        await evaluate("document.querySelector('[data-hrd-widget-form] select[name=width]').value"),
+        '2'
       );
+      await screenshot('builder-desktop.png');
+      await evaluate("document.querySelector('[data-dashboard-save-as]').click()");
+      await waitFor("document.querySelector('[data-dashboard-name-dialog]').open");
+      await evaluate(
+        "const form=document.querySelector('[data-dashboard-name-form]');form.elements.name.value='Progres tersimpan';form.requestSubmit()"
+      );
+      await waitFor(
+        "document.querySelector('[data-hrd-builder]').hidden && document.querySelector('[data-dashboard-select]').selectedOptions[0].textContent === 'Progres tersimpan'"
+      );
+      assert.equal(dashboards.length, 1);
+      assert.equal(writes, 2);
+      await evaluate(
+        "const select=document.querySelector('[data-dashboard-context]');select.value='';select.dispatchEvent(new Event('change'))"
+      );
+      await waitFor(
+        "document.querySelector('[data-dashboard-reports]').hidden && !document.querySelector('[data-dashboard-select]').disabled"
+      );
+      assert.equal(
+        await evaluate("document.querySelector('[data-dashboard-select]').value"),
+        'dashboard-1'
+      );
+      await evaluate(
+        `const select=document.querySelector('[data-dashboard-context]');select.value=${JSON.stringify(workspace.company.id)};select.dispatchEvent(new Event('change'))`
+      );
+      await evaluate('window.scrollTo(0,0)');
       await page('Emulation.setDeviceMetricsOverride', {
         width: 390,
         height: 844,
@@ -269,19 +509,30 @@ test(
         mobile: true,
       });
       await page('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+      await waitFor("document.querySelector('#sidebar').getBoundingClientRect().right <= 0");
+      await evaluate(
+        "const select=document.querySelector('[data-dashboard-select]');select.value='default';select.dispatchEvent(new Event('change'))"
+      );
+      await waitFor("!document.querySelector('[data-dashboard-default]').hidden");
       assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
       assert.equal(
         await evaluate(
-          "getComputedStyle(document.querySelector('[data-hrd-filters] input[type=search]')).fontSize"
+          "getComputedStyle(document.querySelector('[data-dashboard-select]')).fontSize"
         ),
         '16px'
       );
       await screenshot('dashboard-mobile.png');
+      await evaluate(
+        "const select=document.querySelector('[data-dashboard-select]');select.value='dashboard-1';select.dispatchEvent(new Event('change'))"
+      );
+      await waitFor(
+        "document.querySelector('[data-dashboard-default]').hidden && !document.querySelector('[data-dashboard-select]').disabled"
+      );
       await evaluate("document.querySelector('[data-hrd-builder-open]').click()");
-      await waitFor("document.querySelector('[data-hrd-builder]').open");
+      await waitFor("!document.querySelector('[data-hrd-builder]').hidden");
       assert.equal(
         await evaluate(
-          "const d=document.querySelector('[data-hrd-builder]'); const r=d.getBoundingClientRect(); d.scrollWidth <= d.clientWidth && r.left >= 8 && r.right <= innerWidth-8 && r.height <= innerHeight*.91"
+          "const d=document.querySelector('[data-dashboard-widgets]'); d.scrollWidth <= d.clientWidth && document.documentElement.scrollWidth <= innerWidth"
         ),
         true
       );
@@ -292,8 +543,119 @@ test(
         true
       );
       await screenshot('builder-mobile.png');
+      const touchDrag = await evaluate(
+        "const cards=document.querySelectorAll('[data-hrd-edit-index]');window.__touchCard=cards[0];cards[0].scrollIntoView({block:'start'});window.scrollBy(0,-120);window.__touchScroll=scrollY;const a=cards[0].querySelector('.hrd-widget-heading').getBoundingClientRect(),b=cards[1].querySelector('.hrd-widget-heading').getBoundingClientRect();({from:{x:a.left+24,y:a.top+28},to:{x:b.left+24,y:b.top+28}})"
+      );
+      await page('Input.dispatchTouchEvent', {
+        type: 'touchStart',
+        touchPoints: [{ ...touchDrag.from, id: 1 }],
+      });
+      assert.equal(
+        await evaluate('scrollY===window.__touchScroll'),
+        true,
+        'Touch start must not move the page'
+      );
+      await page('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ ...touchDrag.to, id: 1 }],
+      });
+      await waitFor(
+        "document.querySelector('[data-hrd-edit-index]')!==window.__touchCard && document.querySelector('.hrd-drag-ghost')"
+      );
+      await screenshot('drag-mobile.png');
+      assert.equal(
+        await evaluate('scrollY===window.__touchScroll'),
+        true,
+        JSON.stringify(
+          await evaluate(
+            '({before:window.__touchScroll,after:scrollY,height:innerHeight,card:window.__touchCard.getBoundingClientRect().toJSON()})'
+          )
+        )
+      );
+      await page('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await waitFor("!document.querySelector('.hrd-drag-ghost')");
+      await evaluate(
+        "document.querySelector('[data-dashboard-undo]').click();Promise.all(document.getAnimations().map(animation=>animation.finished.catch(()=>{})))"
+      );
+      const touchResize = await evaluate(
+        "const card=document.querySelector('[data-hrd-edit-index]');card.scrollIntoView({block:'start'});window.scrollBy(0,-120);window.__touchHeight=card.getBoundingClientRect().height;const r=card.querySelector('[data-dashboard-resize=s]').getBoundingClientRect();({x:r.left+r.width/2,y:r.top+r.height/2})"
+      );
+      await page('Input.dispatchTouchEvent', {
+        type: 'touchStart',
+        touchPoints: [{ ...touchResize, id: 1 }],
+      });
+      await page('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ x: touchResize.x, y: touchResize.y + 200, id: 1 }],
+      });
+      await waitFor("document.querySelector('[data-hrd-edit-index]').dataset.height==='2'");
+      await page('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      assert.equal(
+        await evaluate(
+          "document.querySelector('[data-hrd-edit-index]').getBoundingClientRect().height>window.__touchHeight+150"
+        ),
+        true
+      );
+      await screenshot('resize-mobile.png');
+      await evaluate("document.querySelector('[data-dashboard-undo]').click()");
+      await evaluate(
+        "document.querySelector('[data-hrd-settings-open]').click();const field=document.querySelector('[data-hrd-widget-form] input[name=title]');field.value='Mobile live edit';field.dispatchEvent(new Event('input',{bubbles:true}))"
+      );
+      assert.equal(
+        await evaluate(
+          "document.querySelector('[data-dashboard-widgets] .hrd-widget-title').textContent"
+        ),
+        'Mobile live edit'
+      );
+      assert.equal(
+        await evaluate(
+          "const panel=document.querySelector('[data-hrd-widget-settings]');const bounds=panel.getBoundingClientRect();bounds.left>=0 && bounds.right<=innerWidth && bounds.height<=innerHeight*.61"
+        ),
+        true
+      );
+      await screenshot('settings-mobile.png');
       assert.deepEqual(errors, []);
-      assert.equal(writes, 0);
+      assert.equal(writes, 2);
+      await evaluate(
+        "document.querySelector('[data-hrd-builder-close]').click();document.querySelector('[data-hrd-builder-confirm-accept]').click()"
+      );
+      await waitFor("document.querySelector('[data-hrd-builder]').hidden");
+      await evaluate("document.querySelector('[data-dashboard-reports]').open=true");
+      await waitFor("document.querySelector('[data-hrd-participants] tr a')");
+      await evaluate("document.querySelector('[data-hrd-participants] tr a').click()");
+      await waitFor(
+        "location.pathname.endsWith('/pemeriksaan') && document.body.textContent.includes('Hanya baca')"
+      );
+      assert.equal(
+        await evaluate(
+          "!document.querySelector('[data-exam-form]') && [...document.querySelectorAll('fieldset input, fieldset select, fieldset textarea')].every(input=>input.matches(':disabled'))"
+        ),
+        true
+      );
+      await waitFor(
+        "[...document.querySelectorAll('img')].filter(image=>image.getClientRects().length).every(image=>image.complete && image.naturalWidth>0)"
+      );
+      await screenshot('readonly-mobile.png');
+      assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'), true);
+      assert.equal(
+        await evaluate(
+          "[...document.querySelectorAll('img')].filter(image=>image.getClientRects().length).every(image=>image.complete && image.naturalWidth>0)"
+        ),
+        true
+      );
+      await page('Emulation.setDeviceMetricsOverride', {
+        width: 1440,
+        height: 1000,
+        deviceScaleFactor: 1,
+        mobile: false,
+      });
+      await page('Emulation.setTouchEmulationEnabled', { enabled: false });
+      await screenshot('readonly-desktop.png');
+      await evaluate('document.querySelector(\'a[href*="#hrd-participants"]\').click()');
+      await waitFor(
+        "location.pathname==='/dashboard' && document.querySelector('[data-dashboard-reports]')?.open && document.querySelector('[data-hrd-participants] tr a')"
+      );
+      assert.deepEqual(errors, []);
     } finally {
       socket?.close();
       if (chrome.exitCode === null && chrome.signalCode === null) {

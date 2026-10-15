@@ -84,6 +84,8 @@ class McuExportTest extends TestCase
             $this->fail('Changed version must fail.');
         } catch (RuntimeException $exception) {
             $this->assertStringContainsString('Tidak ada laporan parsial', $exception->getMessage());
+            $this->assertInstanceOf(RuntimeException::class, $exception->getPrevious());
+            $this->assertSame('Status atau versi peserta berubah.', $exception->getPrevious()->getMessage());
         }
         $this->assertSame('failed', $export->fresh()->status);
         $this->assertSame([], Storage::disk('local')->allFiles('mcu-exports/'.$export->id));

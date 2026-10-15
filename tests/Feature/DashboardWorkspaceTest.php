@@ -29,7 +29,7 @@ class DashboardWorkspaceTest extends TestCase
         $dom = new DOMDocument;
         @$dom->loadHTML($response->getContent());
         $this->assertSame(1, (new DOMXPath($dom))->query('//a[@data-sidebar-link and normalize-space(.)="Dashboard"]')->length);
-        $this->assertStringContainsString($role === 'hrd' ? 'data-hrd-dashboard' : 'data-dashboard-workspace', $response->getContent());
+        $response->assertViewIs('mcu.index')->assertSee('data-dashboard-workspace', false);
     }
 
     #[TestWith(['admin'])]
@@ -50,7 +50,7 @@ class DashboardWorkspaceTest extends TestCase
     public function test_admin_company_analysis_uses_the_same_dashboard_entry_and_legacy_hrd_url_redirects(): void
     {
         $company = Perusahaan::factory()->create();
-        $this->actingAs(User::factory()->create(['role' => 'admin']))->get(route('dashboard', ['company' => $company->id]))->assertOk()->assertSee('data-hrd-dashboard', false)->assertSee('Ringkasan operasional');
+        $this->actingAs(User::factory()->create(['role' => 'admin']))->get(route('dashboard', ['company' => $company->id]))->assertOk()->assertViewIs('mcu.index')->assertSee('data-dashboard-workspace', false)->assertSee('Semua Perusahaan');
         $this->get(route('hrd.index', ['company' => $company->id]))->assertRedirect(route('dashboard', ['company' => $company->id]));
     }
 
@@ -66,6 +66,17 @@ class DashboardWorkspaceTest extends TestCase
     public function test_unassigned_hrd_cannot_use_the_operational_default_as_a_fallback(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'hrd']))->get(route('dashboard'))->assertForbidden();
+    }
+
+    public function test_legacy_doctor_keeps_the_readonly_summary_without_gaining_dashboard_editor_access(): void
+    {
+        $doctor = User::factory()->create(['role' => 'dokter']);
+        $this->actingAs($doctor)->get(route('dashboard'))->assertOk()->assertSee('Kunjungan MCU Terbaru')->assertDontSee('data-dashboard-workspace', false)->assertDontSee('Atur dashboard');
+
+        $this->getJson(route('dashboard.data'))->assertForbidden();
+        $this->postJson(route('dashboard.saved.store'), ['name' => 'Dilarang', 'widgets' => []])->assertForbidden();
+        $this->getJson(route('hrd.data'))->assertForbidden();
+        $this->assertDatabaseCount('dashboard_preferences', 0);
     }
 
     #[TestWith(['admin'])]
@@ -126,14 +137,14 @@ class DashboardWorkspaceTest extends TestCase
         $this->assertDatabaseCount('dashboard_preferences', 0);
     }
 
-    public function test_guests_and_hrd_cannot_read_or_write_the_internal_operational_dashboard_api(): void
+    public function test_guests_cannot_access_the_dashboard_and_hrd_uses_only_the_scoped_unified_api(): void
     {
         $this->getJson(route('dashboard.data'))->assertUnauthorized();
         $this->putJson(route('dashboard.preferences'), ['widgets' => []])->assertUnauthorized();
         $hrd = User::factory()->create(['role' => 'hrd', 'perusahaan_id' => Perusahaan::factory()->create()->id]);
-        $this->actingAs($hrd)->getJson(route('dashboard.data'))->assertForbidden();
+        $this->actingAs($hrd)->getJson(route('dashboard.data'))->assertOk()->assertJsonPath('company.id', $hrd->perusahaan_id)->assertJsonPath('stats.peserta', 0);
         $this->putJson(route('dashboard.preferences'), ['widgets' => []])->assertForbidden();
-        $this->postJson(route('dashboard.preview'), ['widgets' => []])->assertForbidden();
+        $this->postJson(route('dashboard.preview'), ['widgets' => []])->assertOk()->assertJsonPath('company.id', $hrd->perusahaan_id);
         $this->assertDatabaseCount('dashboard_preferences', 0);
     }
 

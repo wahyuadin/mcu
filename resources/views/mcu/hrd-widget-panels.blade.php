@@ -4,7 +4,11 @@
     <div data-hrd-catalog-list class="hrd-catalog-list"></div>
     <div class="hrd-drawer-footer"><p class="text-xs leading-5 text-slate-500">Sumber widget mengikuti hak akses akun Anda. Data yang belum tersedia tidak dianggap nol atau normal.</p><button type="button" data-hrd-catalog-done class="hrd-primary mt-3 w-full">Selesai memilih</button></div>
 </dialog>
+@if($inlineEditor ?? false)
+<aside data-hrd-widget-settings hidden aria-labelledby="hrd-settings-title" class="dashboard-settings">
+@else
 <dialog data-user-modal data-hrd-widget-settings aria-labelledby="hrd-settings-title" class="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+@endif
     <div class="flex items-start justify-between gap-4"><div><p class="text-xs font-bold uppercase tracking-wider text-blue-600">Personalisasi widget</p><h2 id="hrd-settings-title" class="mt-2 text-xl font-bold">Atur tampilan & data</h2></div><button type="button" data-hrd-settings-close class="hrd-button" aria-label="Tutup pengaturan widget">✕</button></div>
     <form data-hrd-widget-form class="mt-6 grid min-w-0 gap-4">
         <label class="hrd-field">Judul widget<input name="title" maxlength="255" required class="hrd-input"></label>
@@ -12,7 +16,7 @@
         <div class="grid grid-cols-2 gap-3"><label class="hrd-field">Visualisasi<select name="chart" class="hrd-input">@foreach(['bar' => 'Grafik batang', 'stacked' => 'Batang bertumpuk', 'pie' => 'Pie', 'donut' => 'Donut', 'table' => 'Tabel', 'indicator' => 'Indikator', 'number' => 'Kartu angka'] as $key => $label)<option value="{{ $key }}">{{ $label }}</option>@endforeach</select></label><label class="hrd-field">Statistik<select name="metric" class="hrd-input">@foreach(['count' => 'Jumlah', 'percent' => 'Persentase', 'average' => 'Rata-rata', 'min' => 'Minimum', 'max' => 'Maksimum'] as $key => $label)<option value="{{ $key }}">{{ $label }}</option>@endforeach</select></label></div>
         <div class="grid grid-cols-2 gap-3"><label class="hrd-field">Lebar desktop<select name="width" class="hrd-input"><option value="1">Ringkas · ⅓</option><option value="2">Lebar · ⅔</option><option value="3">Penuh</option></select></label><label class="hrd-field">Tinggi<select name="height" class="hrd-input"><option value="1">Standar</option><option value="2">Tinggi</option></select></label></div>
         <details data-dashboard-advanced class="rounded-xl border border-slate-200 p-4"><summary class="cursor-pointer text-sm font-semibold text-slate-600">Pengaturan data lanjutan</summary><div class="mt-4 grid gap-4"><label class="hrd-field">Kelompokkan menurut<select name="dimension" class="hrd-input"></select></label><label class="hrd-field">Filter khusus widget<select name="filter_source" class="hrd-input"></select></label><label class="hrd-field">Nilai filter persis<input name="filter_value" maxlength="3000" placeholder="Mis. Produksi / Normal / YA" class="hrd-input"></label></div></details>
-        <p class="text-xs leading-5 text-slate-500">Ukuran otomatis menyesuaikan layar. Pengaturan diterapkan ke pratinjau; simpan dashboard untuk menyimpannya ke akun Anda.</p><button class="hrd-primary w-full">Terapkan ke widget</button>
+        <p class="text-xs leading-5 text-slate-500">{{ ($inlineEditor ?? false) ? 'Perubahan langsung terlihat di kanvas. Simpan dashboard untuk menyimpannya ke akun Anda.' : 'Ukuran otomatis menyesuaikan layar. Pengaturan diterapkan ke pratinjau; simpan dashboard untuk menyimpannya ke akun Anda.' }}</p><button class="hrd-primary w-full">{{ ($inlineEditor ?? false) ? 'Selesai mengatur' : 'Terapkan ke widget' }}</button>
     </form>
-</dialog>
+@if($inlineEditor ?? false)</aside>@else</dialog>@endif
 <dialog data-user-modal data-hrd-builder-confirm aria-labelledby="hrd-builder-confirm-title" class="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"><h2 id="hrd-builder-confirm-title" class="text-xl font-bold"></h2><p data-hrd-builder-confirm-text class="mt-3 text-sm leading-6 text-slate-500"></p><div class="mt-6 flex justify-end gap-2"><button type="button" data-hrd-builder-confirm-cancel autofocus class="hrd-button">Kembali</button><button type="button" data-hrd-builder-confirm-accept class="hrd-primary">Lanjutkan</button></div></dialog>

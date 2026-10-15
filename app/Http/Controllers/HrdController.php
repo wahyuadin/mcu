@@ -40,10 +40,10 @@ class HrdController extends Controller
         $filters = $this->filters($request, $company);
         $preference = HrdDashboardPreference::where('user_id', $request->user()->id)->where('perusahaan_id', $company->id)->first();
         $layout = $preference?->widgets ?? $company->dashboard_layout;
-        $key = 'hrd:v2:'.$company->id.':'.hash('sha256', json_encode([$filters, $layout]));
+        $key = 'hrd:v3:'.$company->id.':'.hash('sha256', json_encode([$filters, $layout]));
         $result = Cache::remember($key, 3, function () use ($analytics, $company, $filters, $layout): array {
             $dataset = $analytics->dataset($company, $filters);
-            if (empty($filters['visit']) && empty($filters['period']) && empty($filters['package'])) {
+            if (empty($filters['visit']) && empty($filters['visit_status']) && empty($filters['period']) && empty($filters['package'])) {
                 Cache::put('hrd-company-sources:v2:'.$company->id, $dataset['sources'], 3);
             }
             if (! empty($filters['cross_source']) && ! isset($dataset['sources'][$filters['cross_source']])) {
@@ -225,16 +225,16 @@ class HrdController extends Controller
 
         return response()->streamDownload(function () use ($rows): void {
             $stream = fopen('php://output', 'w');
-            fwrite($stream, "\xEF\xBB\xBF");
-            fputcsv($stream, ['Kategori', 'Pemeriksaan', 'Kelompok', 'Jumlah', 'Persentase', 'Statistik', 'Nilai statistik', 'Satuan', 'Rujukan'], ',', '"', '');
+            fwrite($stream, "\xEF\xBB\xBFsep=;\r\n");
+            fputcsv($stream, ['Kategori', 'Pemeriksaan', 'Kelompok', 'Jumlah', 'Persentase', 'Statistik', 'Nilai statistik', 'Satuan', 'Rujukan'], ';', '"', '', "\r\n");
             foreach ($rows as $widget) {
                 foreach ($widget['rows'] as $row) {
                     $text = array_map(fn (string $value): string => preg_match('/^[\s\x00-\x1f]*[=+@\-]|^[\t\r\n]/u', $value) ? "'".$value : $value, [$widget['group'], $widget['title'], $row['label'], $widget['unit'] ?? '', $widget['reference'] ?? '']);
-                    fputcsv($stream, [$text[0], $text[1], $text[2], $row['count'], $row['percent'], $widget['metric'], $row['value'] ?? '', $text[3], $text[4]], ',', '"', '');
+                    fputcsv($stream, [$text[0], $text[1], $text[2], $row['count'], $row['percent'], $widget['metric'], $row['value'] ?? '', $text[3], $text[4]], ';', '"', '', "\r\n");
                 }
             }
             fclose($stream);
-        }, 'Rekap_MCU.csv', ['Content-Type' => 'text/csv; charset=UTF-8', 'Cache-Control' => 'no-store, private']);
+        }, 'Rekap_MCU.csv', ['Content-Type' => 'text/csv; charset=UTF-8', 'Cache-Control' => 'no-store, private', 'X-Content-Type-Options' => 'nosniff']);
     }
 
     private function exportState(McuExport $export): array
@@ -262,7 +262,7 @@ class HrdController extends Controller
 
     private function filters(Request $request, Perusahaan $company): array
     {
-        $data = $request->validate(['visit' => ['nullable', 'uuid'], 'package' => ['nullable', 'uuid'], 'period' => ['nullable', 'string', 'max:255'], 'q' => ['nullable', 'string', 'max:255'],
+        $data = $request->validate(['visit' => ['nullable', 'uuid'], 'visit_status' => ['nullable', Rule::in(['draft', 'ongoing', 'completed', 'closed'])], 'package' => ['nullable', 'uuid'], 'period' => ['nullable', 'string', 'max:255'], 'q' => ['nullable', 'string', 'max:255'],
             'cross_source' => ['nullable', 'string', 'max:160'], 'cross_value' => ['nullable', 'string', 'max:3000'], 'page' => ['nullable', 'integer', 'min:1', 'max:1000000'], 'released' => ['nullable', 'boolean'], 'workspace' => ['nullable', 'boolean']]);
         if (! empty($data['visit'])) {
             abort_unless($company->rencanaKunjungans()->whereKey($data['visit'])->exists(), 404);

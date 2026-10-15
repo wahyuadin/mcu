@@ -122,8 +122,8 @@ class DynamicItemAttachmentTest extends TestCase
         Storage::disk('local')->assertExists($old['path']);
         Storage::disk('local')->assertExists($new['path']);
         $item->delete();
-        $this->get(route('pemeriksaan.attachment', [$participant->rencanaKunjungan, $participant, 'dynamic-'.$item->id]))->assertOk()->assertHeader('Content-Type', 'image/png');
-        $this->get(route('pemeriksaan.attachment', [$participant->rencanaKunjungan, $participant, 'dynamic-'.$item->id, 'version' => 1]))->assertOk()->assertHeader('Content-Type', 'image/jpeg');
+        $this->get(route('pemeriksaan.attachment', [$participant->rencanaKunjungan, $participant, 'dynamic-'.$item->id]))->assertOk()->assertHeader('Content-Type', 'image/webp');
+        $this->get(route('pemeriksaan.attachment', [$participant->rencanaKunjungan, $participant, 'dynamic-'.$item->id, 'version' => 1]))->assertOk()->assertHeader('Content-Type', 'image/webp');
         $this->get(route('pemeriksaan.laporan-riwayat.version', [$participant->rencanaKunjungan, $participant, 1]))->assertOk()->assertSee('Lampiran hasil Thorax')->assertSee('version=1', false)->assertDontSee(hash('sha256', $new['path']));
         $other = Karyawan::factory()->create();
         $this->get(route('pemeriksaan.attachment', [$other->rencanaKunjungan, $participant, 'dynamic-'.$item->id]))->assertNotFound();

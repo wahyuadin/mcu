@@ -1,3 +1,22 @@
+import {
+  animateDashboardLayout,
+  captureDashboardRects,
+  setupDashboardGestures,
+} from './dashboard-gestures.js';
+
+export function dashboardRateLimitError(response) {
+  const header = response.headers.get('Retry-After');
+  const delay =
+    header && /^\d+(?:\.\d+)?$/.test(header.trim())
+      ? Number(header)
+      : (Date.parse(header) - Date.now()) / 1000;
+  const retryAfter = Number.isFinite(delay) ? Math.max(1, Math.ceil(delay)) : 60;
+  return Object.assign(
+    new Error(`Terlalu banyak permintaan. Coba kembali dalam ${retryAfter} detik.`),
+    { status: 429, retryAfter }
+  );
+}
+
 export function startHrdPolling({
   load,
   apply,
@@ -14,8 +33,10 @@ export function startHrdPolling({
   let paused = false;
   let controller;
   let revision = 0;
+  let coolingDown = false;
+  let cooldownTimer;
   const run = async () => {
-    if (stopped || paused || doc.hidden) return;
+    if (stopped || paused || doc.hidden || coolingDown) return;
     if (running) {
       requested = true;
       return;
@@ -40,14 +61,22 @@ export function startHrdPolling({
         !paused &&
         !doc.hidden &&
         (timedOut || exception.name !== 'AbortError')
-      )
+      ) {
+        if (exception.status === 429) {
+          coolingDown = true;
+          cooldownTimer = timers.setTimeout(() => {
+            coolingDown = false;
+            run();
+          }, exception.retryAfter * 1000);
+        }
         error(
           timedOut ? new Error('Permintaan terlalu lama. Mencoba kembali otomatis.') : exception
         );
+      }
     } finally {
       timers.clearTimeout(timeoutTimer);
       running = false;
-      if (!stopped && !paused && !doc.hidden)
+      if (!stopped && !paused && !doc.hidden && !coolingDown)
         timer = timers.setTimeout(run, requested ? 0 : interval);
     }
   };
@@ -81,6 +110,7 @@ export function startHrdPolling({
       stopped = true;
       controller?.abort();
       timers.clearTimeout(timer);
+      timers.clearTimeout(cooldownTimer);
       doc.removeEventListener('visibilitychange', visibility);
     },
   };
@@ -138,42 +168,8 @@ export function filterHrdCatalog(sources, query = '', group = '') {
   );
 }
 
-export function setupHrdDashboard(root) {
-  const doc = root.ownerDocument;
-  const filters = root.querySelector('[data-hrd-filters]');
-  const grid = root.querySelector('[data-hrd-widgets]');
-  const tbody = root.querySelector('[data-hrd-participants]');
-  const all = root.querySelector('[data-hrd-all]');
-  const exportButton = root.querySelector('[data-hrd-export]');
-  const error = root.querySelector('[data-hrd-error]');
-  const confirm = root.querySelector('[data-hrd-confirm]');
-  const detail = root.querySelector('[data-hrd-detail]');
+export function createHrdChartRenderer(doc, setCross = () => {}) {
   const colors = ['#2563eb', '#059669', '#db2777', '#7c3aed', '#0891b2', '#d97706', '#475569'];
-  const labels = {
-    belum: 'Belum mulai',
-    proses: 'Dalam proses',
-    siap_finalisasi: 'Siap finalisasi',
-    selesai: 'Final · belum dirilis',
-    batal: 'Batal',
-    tidak_hadir: 'Tidak hadir',
-  };
-  let data;
-  let page = 1;
-  let cross;
-  let exportState;
-  let exporting = false;
-  let submittingExport = false;
-  let activeFilters = {};
-  let confirmedExport;
-  let widgetSignature;
-  let participantSignature;
-  let editing = false;
-  let detailRequest;
-  let detailVersion = 0;
-  let finishEditing = () => {};
-  const selected = new Set();
-  const widgetCards = new Map();
-  const participantRows = new Map();
   const formatNumber = (value) =>
     value === null || value === undefined
       ? '—'
@@ -189,70 +185,6 @@ export function setupHrdDashboard(root) {
     node.type = 'button';
     node.addEventListener('click', action);
     return node;
-  };
-  const params = () => {
-    const query = new URLSearchParams({
-      company: root.dataset.company,
-      page: String(page),
-      workspace: '1',
-    });
-    for (const [field, value] of Object.entries(activeFilters)) {
-      if (value) query.set(field, value);
-    }
-    if (cross) {
-      query.set('cross_source', cross.source);
-      query.set('cross_value', cross.value);
-    }
-    return query;
-  };
-  const request = async (url, options = {}) => {
-    const response = await fetch(url, {
-      credentials: 'same-origin',
-      ...options,
-      headers: {
-        Accept: 'application/json',
-        'X-CSRF-TOKEN': filters.elements.namedItem('_token').value,
-        ...options.headers,
-      },
-    });
-    if ([401, 419].includes(response.status))
-      throw Object.assign(new Error('Sesi berakhir. Silakan login kembali.'), { revoked: true });
-    if ([403, 404].includes(response.status))
-      throw Object.assign(new Error('Akses data tidak lagi tersedia.'), { revoked: true });
-    if (response.status === 429)
-      throw new Error('Terlalu banyak permintaan. Tunggu sebentar sebelum mencoba kembali.');
-    if (!response.headers.get('content-type')?.includes('application/json'))
-      throw new Error('Server belum dapat memproses permintaan.');
-    const payload = await response.json();
-    if (!response.ok)
-      throw new Error(
-        Object.values(payload.errors ?? {})
-          .flat()
-          .join(' ') ||
-          payload.message ||
-          'Permintaan gagal.'
-      );
-    return payload;
-  };
-  const showError = (message) => {
-    error.textContent = message;
-    error.hidden = false;
-  };
-  const setCross = (source, value) => {
-    cross = { source, value };
-    page = 1;
-    selected.clear();
-    all.checked = false;
-    const clear = root.querySelector('[data-hrd-cross-clear]');
-    clear.hidden = false;
-    clear.textContent = `Filter grafik: ${value} · Hapus ×`;
-    poller.refresh();
-  };
-  const selectionChanged = () => {
-    const count = all.checked ? (data?.stats.released ?? 0) : selected.size;
-    root.querySelector('[data-hrd-selected]').textContent =
-      `${count} peserta dipilih${all.checked ? ' di seluruh halaman' : ''}`;
-    exportButton.disabled = exporting || submittingExport || count === 0 || count > 1000;
   };
   const table = (widget) => {
     const node = el('table', '', 'hrd-chart-table');
@@ -484,6 +416,157 @@ export function setupHrdDashboard(root) {
       );
     return body;
   };
+  return { chart, table };
+}
+
+export function setupHrdDashboard(root) {
+  const doc = root.ownerDocument;
+  const filters = root.querySelector('[data-hrd-filters]');
+  const grid = root.querySelector('[data-hrd-widgets]');
+  const tbody = root.querySelector('[data-hrd-participants]');
+  const all = root.querySelector('[data-hrd-all]');
+  const exportButton = root.querySelector('[data-hrd-export]');
+  const error = root.querySelector('[data-hrd-error]');
+  const confirm = root.querySelector('[data-hrd-confirm]');
+  const detail = root.querySelector('[data-hrd-detail]');
+  const labels = {
+    belum: 'Belum mulai',
+    proses: 'Dalam proses',
+    siap_finalisasi: 'Siap finalisasi',
+    selesai: 'Final · belum dirilis',
+    batal: 'Batal',
+    tidak_hadir: 'Tidak hadir',
+  };
+  let data;
+  let page = 1;
+  let cross;
+  let exportState;
+  let exporting = false;
+  let submittingExport = false;
+  let csvBusy = false;
+  let csvRequest;
+  const csvButton = root.querySelector('[data-hrd-recap]');
+  const cooldowns = new Map();
+  let activeFilters = {};
+  let confirmedExport;
+  let widgetSignature;
+  let participantSignature;
+  let editing = false;
+  let detailRequest;
+  let detailVersion = 0;
+  let contextVersion = 0;
+  let finishEditing = () => {};
+  const selected = new Set();
+  const widgetCards = new Map();
+  const participantRows = new Map();
+  const el = (tag, text = '', className = '') => {
+    const node = doc.createElement(tag);
+    node.textContent = text;
+    node.className = className;
+    return node;
+  };
+  const button = (text, action, className = 'hrd-button') => {
+    const node = el('button', text, className);
+    node.type = 'button';
+    node.addEventListener('click', action);
+    return node;
+  };
+  const params = () => {
+    const query = new URLSearchParams({
+      company: root.dataset.company,
+      page: String(page),
+      workspace: '1',
+    });
+    for (const [field, value] of Object.entries(activeFilters)) {
+      if (root.dataset.reportsOnly === 'true' && field === 'visit') continue;
+      if (value) query.set(field, value);
+    }
+    if (root.dataset.scopeVisit) query.set('visit', root.dataset.scopeVisit);
+    if (root.dataset.scopeStatus) query.set('visit_status', root.dataset.scopeStatus);
+    if (cross) {
+      query.set('cross_source', cross.source);
+      query.set('cross_value', cross.value);
+    }
+    return query;
+  };
+  const request = async (url, options = {}, format = 'json') => {
+    const response = await fetch(url, {
+      credentials: 'same-origin',
+      ...options,
+      headers: {
+        Accept: format === 'csv' ? 'application/json, text/csv;q=0.9' : 'application/json',
+        'X-CSRF-TOKEN': filters.elements.namedItem('_token').value,
+        ...options.headers,
+      },
+    });
+    if ([401, 419].includes(response.status))
+      throw Object.assign(new Error('Sesi berakhir. Silakan login kembali.'), { revoked: true });
+    if ([403, 404].includes(response.status))
+      throw Object.assign(new Error('Akses data tidak lagi tersedia.'), { revoked: true });
+    if (response.status === 429) throw dashboardRateLimitError(response);
+    if (format === 'csv' && response.ok) {
+      if (!response.headers.get('content-type')?.toLowerCase().startsWith('text/csv'))
+        throw new Error(
+          'Server tidak mengirim file CSV. Unduhan dibatalkan; silakan coba kembali.'
+        );
+      return response.blob();
+    }
+    if (!response.headers.get('content-type')?.includes('application/json'))
+      throw new Error('Server belum dapat memproses permintaan.');
+    const payload = await response.json();
+    if (!response.ok)
+      throw new Error(
+        Object.values(payload.errors ?? {})
+          .flat()
+          .join(' ') ||
+          payload.message ||
+          'Permintaan gagal.'
+      );
+    return payload;
+  };
+  const showError = (message) => {
+    error.textContent = message;
+    error.hidden = false;
+  };
+  const setCross = (source, value) => {
+    cross = { source, value };
+    page = 1;
+    selected.clear();
+    all.checked = false;
+    const clear = root.querySelector('[data-hrd-cross-clear]');
+    clear.hidden = false;
+    clear.textContent = `Filter grafik: ${value} · Hapus ×`;
+    poller.refresh();
+  };
+  const { chart, table } = createHrdChartRenderer(doc, setCross);
+  const selectionChanged = () => {
+    const count = all.checked ? (data?.stats.released ?? 0) : selected.size;
+    root.querySelector('[data-hrd-selected]').textContent =
+      `${count} peserta dipilih${all.checked ? ' di seluruh halaman' : ''}`;
+    exportButton.disabled =
+      exporting || submittingExport || cooldowns.has('zip') || count === 0 || count > 1000;
+    csvButton.disabled = csvBusy || cooldowns.has('csv') || !data;
+  };
+  const coolDown = (kind, seconds) => {
+    const target = kind === 'zip' ? exportButton : csvButton;
+    const entry = { remaining: seconds, label: target.textContent };
+    const update = () => {
+      if (entry.remaining <= 0) {
+        cooldowns.delete(kind);
+        target.textContent = entry.label;
+        selectionChanged();
+        return;
+      }
+      target.textContent = `Coba ${kind.toUpperCase()} dalam ${entry.remaining} detik`;
+      selectionChanged();
+      entry.timer = window.setTimeout(() => {
+        entry.remaining--;
+        update();
+      }, 1000);
+    };
+    cooldowns.set(kind, entry);
+    update();
+  };
   const renderWidgets = () => {
     const signature = JSON.stringify(data.widgets);
     if (signature === widgetSignature || editing) return;
@@ -661,6 +744,15 @@ export function setupHrdDashboard(root) {
         content.replaceChildren(el('p', exception.message, 'text-sm text-red-700'));
     }
   };
+  const participantUrl = (row) => {
+    const target = new URL(row.examination_url, window.location.href);
+    const context = new URL(window.location.href).searchParams;
+    for (const field of ['dashboard', 'company', 'visit', 'visit_status']) {
+      if (context.has(field)) target.searchParams.set(field, context.get(field));
+    }
+    target.searchParams.set('from_dashboard', '1');
+    return target.toString();
+  };
   const renderParticipants = () => {
     const signature = JSON.stringify([
       data.participants,
@@ -687,9 +779,9 @@ export function setupHrdDashboard(root) {
         label.append(checkbox);
         selectCell.append(label);
         const name = el('td', '', 'max-w-64 px-3 py-4');
-        const open = button(
+        const open = el(
+          'a',
           '',
-          () => openParticipant(state.row),
           'min-h-11 text-left font-semibold text-[#00008B] underline decoration-slate-200 underline-offset-4'
         );
         const number = el('span', '', 'mt-1 block break-all text-xs text-slate-500');
@@ -700,6 +792,12 @@ export function setupHrdDashboard(root) {
         tr.append(selectCell, name, packageCell, department, status);
         state = { tr, checkbox, open, number, packageCell, department, status, row };
         participantRows.set(row.id, state);
+        open.addEventListener('click', (event) => {
+          if (!state.row.released || !state.row.examination_url) {
+            event.preventDefault();
+            if (state.row.released) openParticipant(state.row);
+          } else open.href = participantUrl(state.row);
+        });
         checkbox.addEventListener('change', () => {
           checkbox.checked ? selected.add(row.id) : selected.delete(row.id);
           selectionChanged();
@@ -712,6 +810,11 @@ export function setupHrdDashboard(root) {
       state.checkbox.setAttribute('aria-label', `Pilih ${row.name}`);
       state.open.textContent = row.name;
       state.open.disabled = !row.released;
+      state.open.setAttribute('aria-disabled', String(!row.released));
+      state.open.tabIndex = row.released ? 0 : -1;
+      if (row.released && row.examination_url) {
+        state.open.href = participantUrl(row);
+      } else state.open.removeAttribute('href');
       state.open.classList.toggle('text-slate-700', !row.released);
       state.open.title = row.released
         ? 'Lihat hasil yang sudah dirilis'
@@ -766,7 +869,8 @@ export function setupHrdDashboard(root) {
     selectionChanged();
   };
   const handleDataError = (exception) => {
-    root.querySelector('[data-hrd-live]').textContent = 'Koneksi terputus';
+    root.querySelector('[data-hrd-live]').textContent =
+      exception.status === 429 ? 'Menunggu batas permintaan' : 'Koneksi terputus';
     if (exception.revoked) {
       data = null;
       exportState = null;
@@ -820,7 +924,7 @@ export function setupHrdDashboard(root) {
         const value = result.stats[node.dataset.hrdStat];
         node.textContent = value === null ? 'Belum diatur' : value.toLocaleString('id-ID');
       });
-      renderWidgets();
+      if (root.dataset.reportsOnly !== 'true') renderWidgets();
       renderParticipants();
       selectionChanged();
       showExport();
@@ -880,8 +984,7 @@ export function setupHrdDashboard(root) {
     all.checked = false;
     participantSignature = null;
   };
-  filters.addEventListener('submit', (event) => {
-    event.preventDefault();
+  const applyReportFilters = () => {
     activeFilters = Object.fromEntries(
       ['visit', 'period', 'package', 'q'].map((field) => [
         field,
@@ -892,7 +995,22 @@ export function setupHrdDashboard(root) {
     root.querySelector('[data-hrd-cross-clear]').hidden = true;
     resetSelection();
     poller.refresh();
+  };
+  filters.addEventListener('submit', (event) => {
+    event.preventDefault();
+    applyReportFilters();
   });
+  if (root.dataset.reportsOnly === 'true') {
+    let searchTimer;
+    filters.addEventListener('change', () => {
+      window.clearTimeout(searchTimer);
+      applyReportFilters();
+    });
+    filters.elements.namedItem('q').addEventListener('input', () => {
+      window.clearTimeout(searchTimer);
+      searchTimer = window.setTimeout(applyReportFilters, 300);
+    });
+  }
   filters.elements.namedItem('visit').addEventListener('change', () => {
     filters.elements.namedItem('package').value = '';
     updateOptions();
@@ -929,13 +1047,39 @@ export function setupHrdDashboard(root) {
     renderParticipants();
     selectionChanged();
   });
-  root.querySelector('[data-hrd-recap]').addEventListener('click', () => {
-    const link = el('a');
-    link.href = `${root.dataset.recapUrl}?${params()}`;
-    link.download = 'Rekap_MCU.csv';
-    doc.body.append(link);
-    link.click();
-    link.remove();
+  csvButton.addEventListener('click', async () => {
+    if (csvBusy || cooldowns.has('csv') || !data) return;
+    csvBusy = true;
+    csvRequest = new AbortController();
+    const version = contextVersion;
+    selectionChanged();
+    try {
+      const blob = await request(
+        `${root.dataset.recapUrl}?${params()}`,
+        { signal: csvRequest.signal },
+        'csv'
+      );
+      if (version !== contextVersion) return;
+      error.hidden = true;
+      const url = URL.createObjectURL(blob);
+      const link = el('a');
+      link.href = url;
+      link.download = 'Rekap_MCU.csv';
+      doc.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (exception) {
+      if (version !== contextVersion || exception.name === 'AbortError') return;
+      if (exception.status === 429) coolDown('csv', exception.retryAfter);
+      if (exception.revoked) handleDataError(exception);
+      else showError(exception.message);
+    } finally {
+      if (version === contextVersion) {
+        csvBusy = false;
+        selectionChanged();
+      }
+    }
   });
   root.querySelector('[data-hrd-company]')?.addEventListener('change', (event) => {
     const url = new URL(root.dataset.dashboardUrl ?? window.location.href, window.location.href);
@@ -943,6 +1087,7 @@ export function setupHrdDashboard(root) {
     window.location.assign(url);
   });
   exportButton.addEventListener('click', () => {
+    if (exportButton.disabled || cooldowns.has('zip')) return;
     confirmedExport = {
       query: params().toString(),
       body: { all: all.checked, ids: [...selected] },
@@ -953,23 +1098,32 @@ export function setupHrdDashboard(root) {
   });
   root.querySelector('[data-hrd-confirm-cancel]').addEventListener('click', () => confirm.close());
   root.querySelector('[data-hrd-confirm-submit]').addEventListener('click', async () => {
-    if (exporting || submittingExport || !confirmedExport) return;
+    if (exporting || submittingExport || cooldowns.has('zip') || !confirmedExport) return;
     submittingExport = true;
+    const version = contextVersion;
     selectionChanged();
     confirm.close();
     try {
-      exportState = await request(`${root.dataset.exportUrl}?${confirmedExport.query}`, {
+      const result = await request(`${root.dataset.exportUrl}?${confirmedExport.query}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(confirmedExport.body),
       });
+      if (version !== contextVersion) return;
+      exportState = result;
       showExport();
       poller.refresh();
     } catch (exception) {
-      showError(exception.message);
+      if (version === contextVersion) {
+        if (exception.status === 429) coolDown('zip', exception.retryAfter);
+        if (exception.revoked) handleDataError(exception);
+        else showError(exception.message);
+      }
     } finally {
-      submittingExport = false;
-      selectionChanged();
+      if (version === contextVersion) {
+        submittingExport = false;
+        selectionChanged();
+      }
     }
   });
   root.querySelector('[data-hrd-detail-close]').addEventListener('click', () => detail.close());
@@ -1002,7 +1156,38 @@ export function setupHrdDashboard(root) {
     },
   });
   finishEditing = editor.close;
-  return { poller };
+  return {
+    poller,
+    setCompany(company, scope = {}) {
+      poller.pause();
+      contextVersion++;
+      csvRequest?.abort();
+      csvBusy = false;
+      root.dataset.company = company;
+      root.dataset.scopeVisit = scope.visit ?? '';
+      root.dataset.scopeStatus = scope.visit_status ?? '';
+      data = null;
+      cross = null;
+      exportState = null;
+      exporting = false;
+      submittingExport = false;
+      confirmedExport = null;
+      activeFilters = {};
+      filters.reset();
+      resetSelection();
+      participantRows.clear();
+      tbody.replaceChildren();
+      detailRequest?.abort();
+      detailVersion++;
+      detail.close();
+      confirm.close();
+      root.querySelector('[data-hrd-cross-clear]').hidden = true;
+      root.querySelector('[data-hrd-export-state]').hidden = true;
+      root.querySelector('[data-hrd-download]').hidden = true;
+      exportButton.disabled = true;
+      if (company) poller.resume();
+    },
+  };
 }
 
 export function setupDashboardBuilder({
@@ -1014,6 +1199,8 @@ export function setupDashboardBuilder({
   params = () => new URLSearchParams(),
   getData,
   handleDataError,
+  saveDashboard,
+  onLiveData = () => {},
   onStart = () => {},
   onFinish = () => {},
 }) {
@@ -1035,6 +1222,10 @@ export function setupDashboardBuilder({
   let draft = [];
   let editing = false;
   let finishEditing = () => {};
+  let startEditing = () => {};
+  let isDirty = () => false;
+  let refreshDraft = () => {};
+  let confirmAction = () => {};
   if (builder) {
     const list = grid;
     const catalog = root.querySelector('[data-hrd-catalog]');
@@ -1042,10 +1233,17 @@ export function setupDashboardBuilder({
     const search = root.querySelector('[data-hrd-catalog-search]');
     const category = root.querySelector('[data-hrd-catalog-category]');
     const settings = root.querySelector('[data-hrd-widget-settings]');
+    const inlineSettings = settings.tagName === 'ASIDE';
     const add = root.querySelector('[data-hrd-widget-form]');
     const confirmation = root.querySelector('[data-hrd-builder-confirm]');
     const status = builder.querySelector('[data-hrd-builder-status]');
-    let dragIndex;
+    let widgetKeys = [];
+    let nextKey = 0;
+    let history = [];
+    let historyIndex = -1;
+    let gestureSnapshot;
+    const undoButton = builder.querySelector('[data-dashboard-undo]');
+    const redoButton = builder.querySelector('[data-dashboard-redo]');
     let sources = [];
     let previews = [];
     let previewTimer;
@@ -1053,11 +1251,13 @@ export function setupDashboardBuilder({
     let previewRunning = false;
     let previewRequested = false;
     let previewVersion = 0;
+    let previewCoolingDown = false;
     let saving = false;
     let selectedWidget;
     let originalDraft;
     let useDefault = false;
     let confirmedAction;
+    let suspended = false;
     const fields = Object.fromEntries(
       [
         'source',
@@ -1072,12 +1272,33 @@ export function setupDashboardBuilder({
       ].map((name) => [name, add.elements.namedItem(name)])
     );
     const dirty = () => useDefault || JSON.stringify(draft) !== originalDraft;
+    const snapshot = () => ({ widgets: structuredClone(draft), keys: [...widgetKeys], useDefault });
+    const updateHistoryControls = () => {
+      if (undoButton) undoButton.disabled = saving || historyIndex <= 0;
+      if (redoButton) redoButton.disabled = saving || historyIndex >= history.length - 1;
+    };
+    const checkpoint = () => {
+      const current = snapshot();
+      if (JSON.stringify(history[historyIndex]) !== JSON.stringify(current)) {
+        history = history.slice(0, historyIndex + 1);
+        history.push(current);
+        if (history.length > 50) history.shift();
+        historyIndex = history.length - 1;
+      }
+      updateHistoryControls();
+    };
+    isDirty = dirty;
+    const hideSettings = () => {
+      if (inlineSettings) settings.hidden = true;
+      else settings.close();
+    };
     const ask = (title, text, action) => {
       confirmedAction = action;
       confirmation.querySelector('h2').textContent = title;
       root.querySelector('[data-hrd-builder-confirm-text]').textContent = text;
       confirmation.showModal();
     };
+    confirmAction = ask;
     const sourceOptions = () =>
       sources.map((source) => [
         source.id,
@@ -1153,11 +1374,14 @@ export function setupDashboardBuilder({
       }
     };
     const renderPreviews = () => {
-      [...list.children].forEach((card, index) => {
+      [...list.querySelectorAll('[data-hrd-edit-index]')].forEach((card, index) => {
         const target = card.querySelector('[data-builder-preview]');
         if (!target) return;
         const scroll = target.scrollTop;
         const widget = previews[index];
+        const signature = JSON.stringify(widget);
+        if (target.dataset.signature === signature) return;
+        target.dataset.signature = signature;
         target.replaceChildren(
           widget
             ? chart(widget)
@@ -1167,14 +1391,24 @@ export function setupDashboardBuilder({
       });
     };
     const runPreview = async () => {
-      if (!editing || saving) return;
+      if (!editing || saving || doc.hidden || suspended || previewCoolingDown) return;
+      if (gestures.active()) {
+        previewTimer = window.setTimeout(runPreview, 4000);
+        return;
+      }
       if (previewRunning) {
         previewRequested = true;
         return;
       }
       previewRunning = true;
       previewRequested = false;
+      window.clearTimeout(previewTimer);
       previewRequest = new AbortController();
+      let timedOut = false;
+      const timeoutTimer = window.setTimeout(() => {
+        timedOut = true;
+        previewRequest?.abort();
+      }, 30000);
       const version = previewVersion;
       status.textContent = 'Menyiapkan pratinjau…';
       try {
@@ -1186,9 +1420,13 @@ export function setupDashboardBuilder({
         });
         if (version === previewVersion && editing) {
           previews = result.widgets;
-          if (useDefault) {
+          onLiveData(result);
+          if (useDefault && JSON.stringify(draft) !== JSON.stringify(result.layout)) {
             draft = result.layout.map((widget) => ({ ...widget }));
+            widgetKeys = draft.map(() => `widget-${++nextKey}`);
             renderDraft();
+            history[historyIndex] = snapshot();
+            updateHistoryControls();
           } else renderPreviews();
           status.textContent = useDefault
             ? 'Tampilan default disiapkan. Simpan untuk menerapkannya ke akun Anda.'
@@ -1199,21 +1437,44 @@ export function setupDashboardBuilder({
           handleDataError(exception);
           return;
         }
-        if (exception.name !== 'AbortError' && version === previewVersion && editing)
-          status.textContent = exception.message;
+        if (exception.status === 429 && version === previewVersion) {
+          previewCoolingDown = true;
+          window.setTimeout(() => {
+            previewCoolingDown = false;
+            if (editing) schedulePreview();
+          }, exception.retryAfter * 1000);
+        }
+        if ((timedOut || exception.name !== 'AbortError') && version === previewVersion && editing)
+          status.textContent = `${timedOut ? 'Permintaan terlalu lama.' : exception.message} Data terakhir tetap ditampilkan.`;
       } finally {
+        window.clearTimeout(timeoutTimer);
         previewRunning = false;
-        if (previewRequested && editing && !saving)
-          previewTimer = window.setTimeout(runPreview, 900);
+        window.clearTimeout(previewTimer);
+        if (
+          editing &&
+          !saving &&
+          !doc.hidden &&
+          !suspended &&
+          !previewCoolingDown &&
+          (previewRequested || saveDashboard)
+        )
+          previewTimer = window.setTimeout(
+            runPreview,
+            previewRequested ? (saveDashboard ? 300 : 900) : 4000
+          );
       }
     };
     const schedulePreview = () => {
       previewVersion++;
       window.clearTimeout(previewTimer);
       previewRequest?.abort();
-      previewTimer = window.setTimeout(runPreview, 900);
+      previewRequested = true;
+      if (!previewRunning && !previewCoolingDown)
+        previewTimer = window.setTimeout(runPreview, saveDashboard ? 300 : 900);
     };
-    const renderDraft = () => {
+    refreshDraft = schedulePreview;
+    const renderDraft = (animate = root.dataset.keyboard !== 'true') => {
+      const before = captureDashboardRects(list);
       list.replaceChildren(
         ...draft.map((widget, index) => {
           const card = el('div', '', 'hrd-widget hrd-builder-card');
@@ -1221,32 +1482,23 @@ export function setupDashboardBuilder({
           card.dataset.height = widget.height;
           card.dataset.kind = sources.find((source) => source.id === widget.source)?.kind ?? 'text';
           card.dataset.hrdEditIndex = index;
+          card.dataset.dashboardKey = widgetKeys[index];
+          card.tabIndex = 0;
+          card.setAttribute('role', 'group');
+          card.setAttribute('aria-roledescription', 'Kartu dashboard yang dapat dipindahkan');
+          card.setAttribute('aria-label', widget.title);
+          card.setAttribute('aria-describedby', 'dashboard-gesture-help');
+          card.dataset.selected = String(
+            selectedWidget === index && (!inlineSettings || !settings.hidden)
+          );
           const changed = () => {
+            hideSettings();
+            selectedWidget = undefined;
             useDefault = false;
             renderDraft();
+            checkpoint();
             schedulePreview();
           };
-          const handle = button('⠿ Seret', () => {}, 'hrd-button cursor-grab');
-          handle.draggable = true;
-          handle.setAttribute('aria-label', `Seret kartu ${index + 1}`);
-          handle.addEventListener('dragstart', (event) => {
-            dragIndex = index;
-            event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData('text/plain', String(index));
-          });
-          handle.addEventListener('dragend', () => {
-            dragIndex = undefined;
-          });
-          card.addEventListener('dragover', (event) => event.preventDefault());
-          card.addEventListener('drop', (event) => {
-            event.preventDefault();
-            if (Number.isInteger(dragIndex)) {
-              draft = moveHrdWidget(draft, dragIndex, index);
-              previews = moveHrdWidget(previews, dragIndex, index);
-              dragIndex = undefined;
-              changed();
-            }
-          });
           const heading = el('div', '', 'hrd-widget-heading');
           const title = el('div', '', 'min-w-0');
           title.append(
@@ -1257,86 +1509,50 @@ export function setupDashboardBuilder({
               'hrd-widget-subtitle'
             )
           );
-          const configure = button('Atur', () => openSettings(index));
+          const configure = button('Atur', () => openSettings(Number(card.dataset.hrdEditIndex)));
           configure.dataset.hrdSettingsOpen = '';
           configure.setAttribute('aria-label', `Atur ${widget.title}`);
           heading.append(title, configure);
+          if (inlineSettings)
+            card.addEventListener('click', (event) => {
+              if (!event.target.closest('button, a, input, select, [data-dashboard-resize]'))
+                openSettings(Number(card.dataset.hrdEditIndex));
+            });
           const actions = el('div', '', 'hrd-widget-actions');
           const preview = el('div');
           preview.dataset.builderPreview = '';
           preview.inert = true;
           preview.append(
             previews[index]
-              ? chart(previews[index])
+              ? chart({ ...previews[index], ...widget })
               : el('p', 'Pratinjau akan muncul di sini.', 'p-4 text-sm text-slate-500')
           );
-          const resize = button('↔ Ukuran', () => {}, 'hrd-button hrd-resize-handle');
-          resize.setAttribute('aria-label', `Ubah ukuran kartu ${index + 1}`);
-          resize.addEventListener('pointerdown', (event) => {
-            if (event.button !== 0 || saving) return;
-            event.preventDefault();
-            resize.setPointerCapture(event.pointerId);
-            const x = event.clientX;
-            const y = event.clientY;
-            const width = widget.width;
-            const height = widget.height;
-            const columns = window.getComputedStyle(list).gridTemplateColumns.split(' ').length;
-            const pitch = list.getBoundingClientRect().width / columns;
-            const move = (event) => {
-              widget.width = Math.min(
-                3,
-                Math.max(1, width + Math.round((event.clientX - x) / pitch))
-              );
-              widget.height = Math.min(
-                2,
-                Math.max(1, height + Math.round((event.clientY - y) / 190))
-              );
-              card.dataset.width = widget.width;
-              card.dataset.height = widget.height;
-              useDefault = false;
-            };
-            const end = () => {
-              resize.removeEventListener('pointermove', move);
-              resize.removeEventListener('pointerup', end);
-              resize.removeEventListener('pointercancel', end);
-              schedulePreview();
-            };
-            resize.addEventListener('pointermove', move);
-            resize.addEventListener('pointerup', end);
-            resize.addEventListener('pointercancel', end);
-          });
-          const move = (direction) => {
-            const next = index + direction;
-            draft = moveHrdWidget(draft, index, next);
-            previews = moveHrdWidget(previews, index, next);
-            changed();
-            list.children[next]
-              ?.querySelector(direction < 0 ? '[data-move-up]' : '[data-move-down]')
-              ?.focus({ preventScroll: true });
-          };
-          const up = button('↑', () => move(-1));
-          up.dataset.moveUp = '';
-          up.disabled = index === 0;
-          up.setAttribute('aria-label', `Naikkan ${widget.title}`);
-          const down = button('↓', () => move(1));
-          down.dataset.moveDown = '';
-          down.disabled = index === draft.length - 1;
-          down.setAttribute('aria-label', `Turunkan ${widget.title}`);
           actions.append(
-            handle,
-            up,
-            down,
             button('Hapus', () => {
-              draft.splice(index, 1);
-              previews.splice(index, 1);
+              if (gestures.active()) return;
+              const position = Number(card.dataset.hrdEditIndex);
+              draft.splice(position, 1);
+              previews.splice(position, 1);
+              widgetKeys.splice(position, 1);
               changed();
-              list.children[Math.min(index, draft.length - 1)]
+              list.children[Math.min(position, draft.length - 1)]
                 ?.querySelector('[data-hrd-settings-open]')
                 ?.focus({ preventScroll: true });
-            }),
-            resize
+            })
           );
           card.append(heading, preview, actions);
+          for (const [edge, label] of [
+            ['e', 'lebar'],
+            ['s', 'tinggi'],
+            ['se', 'lebar dan tinggi'],
+          ]) {
+            const handle = el('span', '', 'hrd-resize-handle');
+            handle.dataset.dashboardResize = edge;
+            handle.tabIndex = 0;
+            handle.setAttribute('role', 'button');
+            handle.setAttribute('aria-label', `Tarik untuk mengubah ${label} ${widget.title}`);
+            card.append(handle);
+          }
           return card;
         })
       );
@@ -1348,10 +1564,12 @@ export function setupDashboardBuilder({
         },
         'hrd-add-card'
       );
+      addCard.dataset.dashboardAddCard = '';
       list.append(addCard);
+      animateDashboardLayout(list, before, { animate });
       status.textContent = `${draft.length} widget · ${dirty() ? 'Perubahan belum disimpan' : 'Belum ada perubahan'}`;
     };
-    const openSettings = (index) => {
+    const openSettings = (index, reveal = true) => {
       selectedWidget = index;
       const widget = draft[index];
       fillOptions(fields.source, sourceOptions(), widget.source);
@@ -1367,7 +1585,10 @@ export function setupDashboardBuilder({
         [
           ['', 'Tanpa filter khusus'],
           ...sourceOptions().filter(
-            ([id]) => !id.startsWith('stat:') && !id.startsWith('ranking:')
+            ([id]) =>
+              !['kpi', 'ranking', 'operation_table'].includes(
+                sources.find((source) => source.id === id)?.kind
+              )
           ),
         ],
         widget.filter_source ?? ''
@@ -1377,8 +1598,99 @@ export function setupDashboardBuilder({
       for (const name of ['title', 'width', 'height', 'filter_value'])
         fields[name].value = widget[name] ?? '';
       normalizeOptions(widget.source, fields);
-      settings.showModal();
+      if (inlineSettings) {
+        if (reveal) settings.hidden = false;
+        [...list.children].forEach((card, position) => {
+          card.dataset.selected = String(position === index);
+        });
+        if (reveal && window.matchMedia?.('(max-width: 1279px)').matches)
+          list.children[index]?.scrollIntoView?.({ block: 'start' });
+      } else if (reveal) settings.showModal();
     };
+    const applySnapshot = (state, render = true) => {
+      const selectedKey = widgetKeys[selectedWidget];
+      const oldPreviews = new Map(widgetKeys.map((key, index) => [key, previews[index]]));
+      draft = structuredClone(state.widgets);
+      widgetKeys = [...state.keys];
+      useDefault = state.useDefault;
+      previews = widgetKeys.map((key) => oldPreviews.get(key) ?? null);
+      selectedWidget = selectedKey === undefined ? undefined : widgetKeys.indexOf(selectedKey);
+      if (selectedWidget === -1) selectedWidget = undefined;
+      if (render) {
+        if (selectedWidget === undefined) hideSettings();
+        renderDraft();
+      } else
+        [...list.querySelectorAll('[data-hrd-edit-index]')].forEach((card, index) => {
+          card.dataset.width = draft[index].width;
+          card.dataset.height = draft[index].height;
+        });
+      if (selectedWidget !== undefined) openSettings(selectedWidget, false);
+      updateHistoryControls();
+    };
+    const gestures = setupDashboardGestures({
+      list,
+      canStart: () => editing && !saving,
+      getWidget: (index) => draft[index],
+      onSelect: (index) => openSettings(index, false),
+      onStart: () => {
+        gestureSnapshot = snapshot();
+        previewVersion++;
+        previewRequest?.abort();
+        window.clearTimeout(previewTimer);
+        if (inlineSettings && window.matchMedia?.('(max-width: 1279px)').matches)
+          settings.hidden = true;
+      },
+      onReorder: (from, to) => {
+        const key = widgetKeys[selectedWidget];
+        draft = moveHrdWidget(draft, from, to);
+        previews = moveHrdWidget(previews, from, to);
+        widgetKeys = moveHrdWidget(widgetKeys, from, to);
+        selectedWidget = widgetKeys.indexOf(key);
+        useDefault = false;
+        status.textContent = `Posisi ${selectedWidget + 1} dari ${draft.length} · lepaskan untuk menempatkan kartu.`;
+      },
+      onResize: (index, width, height) => {
+        draft[index].width = width;
+        draft[index].height = height;
+        useDefault = false;
+        fields.width.value = String(width);
+        fields.height.value = String(height);
+        status.textContent = `${width}/3 lebar · tinggi ${height} · perubahan belum disimpan.`;
+      },
+      onCommit: () => {
+        checkpoint();
+        renderPreviews();
+        schedulePreview();
+        status.textContent = `${draft.length} widget · Perubahan belum disimpan`;
+      },
+      onCancel: () => {
+        applySnapshot(gestureSnapshot, false);
+        renderPreviews();
+        schedulePreview();
+      },
+    });
+    const travelHistory = (direction) => {
+      if (!editing || saving || gestures.active()) return;
+      const next = historyIndex + direction;
+      if (next < 0 || next >= history.length) return;
+      historyIndex = next;
+      applySnapshot(history[next]);
+      schedulePreview();
+    };
+    undoButton?.addEventListener('click', () => travelHistory(-1));
+    redoButton?.addEventListener('click', () => travelHistory(1));
+    root.addEventListener('keydown', (event) => {
+      if (
+        !editing ||
+        !(event.ctrlKey || event.metaKey) ||
+        event.target.closest('input, select, textarea, [contenteditable="true"]')
+      )
+        return;
+      if (['z', 'y'].includes(event.key.toLowerCase())) {
+        event.preventDefault();
+        travelHistory(event.key.toLowerCase() === 'y' || event.shiftKey ? 1 : -1);
+      }
+    });
     const renderCatalog = () => {
       const matching = filterHrdCatalog(sources, search.value, category.value);
       catalogList.replaceChildren();
@@ -1401,11 +1713,13 @@ export function setupDashboardBuilder({
         const addButton = button(
           '＋',
           () => {
-            if (saving || draft.length >= 200) return;
+            if (saving || gestures.active() || draft.length >= 200) return;
             draft.push(createHrdWidget(source));
+            widgetKeys.push(`widget-${++nextKey}`);
             previews.push(null);
             useDefault = false;
             renderDraft();
+            checkpoint();
             schedulePreview();
             renderCatalog();
             [...catalogList.children]
@@ -1436,22 +1750,27 @@ export function setupDashboardBuilder({
           )
         );
     };
-    root.querySelector('[data-hrd-builder-open]').addEventListener('click', () => {
+    startEditing = (empty = false) => {
       data = getData();
-      if (!data) return;
+      if (!data || editing) return;
       editing = true;
       onStart();
       poller.pause();
-      draft = data.layout.map((widget) => ({
+      draft = (empty ? [] : data.layout).map((widget) => ({
         ...widget,
         dimension: widget.dimension ?? '',
         filter_source: widget.filter_source ?? '',
         filter_value: widget.filter_value ?? '',
       }));
-      previews = [...data.widgets];
+      previews = empty ? [] : [...data.widgets];
+      widgetKeys = draft.map(() => `widget-${++nextKey}`);
       sources = data.builder_sources ?? data.sources;
-      originalDraft = JSON.stringify(draft);
+      originalDraft = empty ? null : JSON.stringify(draft);
+      selectedWidget = undefined;
       useDefault = false;
+      history = [];
+      historyIndex = -1;
+      checkpoint();
       root.dataset.editing = 'true';
       builder.hidden = false;
       root.querySelector('[data-hrd-builder-open]').hidden = true;
@@ -1473,8 +1792,10 @@ export function setupDashboardBuilder({
       search.value = '';
       renderCatalog();
       renderDraft();
+      if (saveDashboard) previewTimer = window.setTimeout(runPreview, 4000);
       builder.scrollIntoView?.({ block: 'nearest' });
-    });
+    };
+    root.querySelector('[data-hrd-builder-open]').addEventListener('click', () => startEditing());
     ['source', 'metric'].forEach((field) =>
       add.elements
         .namedItem(field)
@@ -1491,10 +1812,13 @@ export function setupDashboardBuilder({
       else finishEditing();
     });
     finishEditing = (resume = true) => {
+      gestures.cancel();
       editing = false;
       previewVersion++;
       previewRequest?.abort();
       window.clearTimeout(previewTimer);
+      hideSettings();
+      catalog.close();
       builder.hidden = true;
       root.dataset.editing = 'false';
       root.querySelector('[data-hrd-builder-open]').hidden = false;
@@ -1510,43 +1834,65 @@ export function setupDashboardBuilder({
       root.querySelector('[data-hrd-builder-open]').focus({ preventScroll: true });
       if (resume) poller.resume();
     };
-    add.addEventListener('submit', (event) => {
-      event.preventDefault();
-      if (saving || !draft[selectedWidget] || !add.reportValidity()) return;
-      draft[selectedWidget] = Object.fromEntries(
+    const applySettings = (close = false) => {
+      if (saving || gestures.active() || !draft[selectedWidget]) return;
+      const previous = draft[selectedWidget];
+      const next = Object.fromEntries(
         Object.entries(fields).map(([key, field]) => [
           key,
           ['width', 'height'].includes(key) ? Number(field.value) : field.value,
         ])
       );
-      previews[selectedWidget] = null;
+      if (
+        ['source', 'metric', 'dimension', 'filter_source', 'filter_value'].some(
+          (key) => (previous[key] ?? '') !== (next[key] ?? '')
+        )
+      )
+        previews[selectedWidget] = null;
+      draft[selectedWidget] = next;
       useDefault = false;
-      settings.close();
+      if (close) hideSettings();
       renderDraft();
-      schedulePreview();
-      list.children[selectedWidget]
-        ?.querySelector('[data-hrd-settings-open]')
-        ?.focus({ preventScroll: true });
+      checkpoint();
+      if (add.checkValidity?.() !== false) schedulePreview();
+      if (close)
+        list.children[selectedWidget]
+          ?.querySelector('[data-hrd-settings-open]')
+          ?.focus({ preventScroll: true });
+    };
+    add.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (!add.reportValidity()) return;
+      applySettings(true);
     });
+    if (inlineSettings) {
+      add.addEventListener('input', () => applySettings());
+      add.addEventListener('change', () => applySettings());
+    }
     builder.querySelector('[data-hrd-builder-default]').addEventListener('click', () => {
       ask(
         'Kembalikan tampilan awal?',
         'Susunan pribadi akan dikembalikan ke dashboard bawaan sesuai hak akses Anda. Perubahan baru disimpan setelah menekan Simpan dashboard.',
         () => {
+          hideSettings();
+          selectedWidget = undefined;
           useDefault = true;
+          checkpoint();
           schedulePreview();
           status.textContent = 'Menyiapkan tampilan awal…';
         }
       );
     });
-    builder.querySelector('[data-hrd-builder-save]').addEventListener('click', async (event) => {
-      if (saving) return;
+    const persist = async (saveAs = false) => {
+      if (saving || gestures.active()) return;
+      if (inlineSettings && !settings.hidden && !add.reportValidity()) return;
       saving = true;
       previewRequest?.abort();
       window.clearTimeout(previewTimer);
       const controls = [
         ...builder.querySelectorAll('button, input, select'),
         ...grid.querySelectorAll('button'),
+        ...settings.querySelectorAll('button, input, select'),
       ];
       controls.forEach((control) => {
         control.disabled = true;
@@ -1554,14 +1900,17 @@ export function setupDashboardBuilder({
       status.textContent = 'Menyimpan…';
       let saveError;
       try {
-        await request(
-          `${root.dataset.layoutUrl}${root.dataset.company ? '?company=' + encodeURIComponent(root.dataset.company) : ''}`,
-          {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ widgets: useDefault ? [] : draft, use_default: useDefault }),
-          }
-        );
+        const result = saveDashboard
+          ? await saveDashboard({ widgets: draft, use_default: useDefault }, saveAs)
+          : await request(
+              `${root.dataset.layoutUrl}${root.dataset.company ? '?company=' + encodeURIComponent(root.dataset.company) : ''}`,
+              {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ widgets: useDefault ? [] : draft, use_default: useDefault }),
+              }
+            );
+        if (saveDashboard && result === false) return;
         finishEditing();
         const layoutNote = root.querySelector('[data-hrd-layout-note]');
         if (layoutNote) layoutNote.textContent = 'Dashboard pribadi berhasil disimpan.';
@@ -1572,15 +1921,19 @@ export function setupDashboardBuilder({
         saving = false;
         if (editing) {
           renderDraft();
-          status.textContent = `${saveError} Perubahan belum disimpan; Anda dapat mencoba lagi.`;
+          status.textContent = saveError
+            ? `${saveError} Perubahan belum disimpan; Anda dapat mencoba lagi.`
+            : 'Perubahan belum disimpan.';
         }
-        controls
-          .slice(0, builder.querySelectorAll('button, input, select').length)
-          .forEach((control) => {
-            control.disabled = false;
-          });
+        controls.forEach((control) => {
+          control.disabled = false;
+        });
+        updateHistoryControls();
+        if (editing && saveDashboard) previewTimer = window.setTimeout(runPreview, 4000);
       }
-    });
+    };
+    builder.querySelector('[data-hrd-builder-save]').addEventListener('click', () => persist());
+    root.querySelector('[data-dashboard-save-as]')?.addEventListener('click', () => persist(true));
     root.querySelector('[data-hrd-catalog-open]').addEventListener('click', () => {
       renderCatalog();
       catalog.showModal();
@@ -1590,18 +1943,17 @@ export function setupDashboardBuilder({
     );
     search.addEventListener('input', renderCatalog);
     category.addEventListener('change', renderCatalog);
-    root
-      .querySelector('[data-hrd-settings-close]')
-      .addEventListener('click', () => settings.close());
+    root.querySelector('[data-hrd-settings-close]').addEventListener('click', hideSettings);
     root
       .querySelector('[data-hrd-builder-confirm-cancel]')
       .addEventListener('click', () => confirmation.close());
     root.querySelector('[data-hrd-builder-confirm-accept]').addEventListener('click', () => {
       const action = confirmedAction;
+      confirmedAction = undefined;
       confirmation.close();
       action?.();
     });
-    [catalog, settings, confirmation].forEach((dialog) => {
+    [catalog, ...(!inlineSettings ? [settings] : []), confirmation].forEach((dialog) => {
       dialog.addEventListener('click', (event) => {
         if (event.target !== dialog) return;
         const rect = dialog.getBoundingClientRect();
@@ -1628,6 +1980,24 @@ export function setupDashboardBuilder({
         event.returnValue = '';
       }
     });
+    doc.addEventListener('visibilitychange', () => {
+      if (!editing || !saveDashboard) return;
+      if (doc.hidden) {
+        previewVersion++;
+        previewRequest?.abort();
+        window.clearTimeout(previewTimer);
+      } else schedulePreview();
+    });
+    window.addEventListener('pagehide', () => {
+      suspended = true;
+      previewVersion++;
+      previewRequest?.abort();
+      window.clearTimeout(previewTimer);
+    });
+    window.addEventListener('pageshow', () => {
+      suspended = false;
+      if (editing && saveDashboard) schedulePreview();
+    });
   }
   window.addEventListener('pagehide', () => poller.pause());
   root.addEventListener('keydown', () => {
@@ -1639,7 +2009,16 @@ export function setupDashboardBuilder({
   window.addEventListener('pageshow', (event) => {
     if (event.persisted && !editing) poller.resume();
   });
-  return { poller, close: (resume = true) => finishEditing(resume) };
+  return {
+    poller,
+    close: (resume = true) => finishEditing(resume),
+    start: startEditing,
+    dirty: () => editing && isDirty(),
+    refresh: () => {
+      if (editing) refreshDraft();
+    },
+    confirm: (...args) => confirmAction(...args),
+  };
 }
 
 if (typeof document !== 'undefined') {

@@ -34,9 +34,13 @@ class HrdPresentationTest extends TestCase
         $exam = $participant->anamnesa()->create(['rencana_kunjungan_id' => $participant->rencana_kunjungan_id, 'status' => 'final', 'package_items' => ['bmi' => true], 'dynamic_schema' => $schema,
             'dynamic_answers' => [$number->id => 170, $radio->id => 'TIDAK', $text->id => 'Catatan singkat', $lab->id => 14.5], 'status_kelaikan' => 'Fit to Work', 'catatan_dokter' => 'Hasil pemeriksaan dalam batas normal.', 'anjuran_saran' => 'Olahraga teratur dan pemeriksaan berkala.', 'bmi' => 22.5, 'kategori_bmi' => 'Normal']);
         $this->actingAs(User::factory()->create(['role' => 'admin', 'name' => 'Admin Demo']));
-        $dashboard = $this->get(route('dashboard', ['company' => $participant->perusahaan_id]))->assertOk()->assertSee('Kanvas & pratinjau', false)->assertSee('data-preview-url', false);
+        $dashboard = $this->get(route('dashboard', ['company' => $participant->perusahaan_id]))->assertOk()->assertSee('Edit langsung di kanvas', false)->assertSee('data-preview-url', false);
+        $workspace = $this->getJson(route('dashboard.data', ['company' => $participant->perusahaan_id]))->assertOk();
         $data = $this->getJson(route('hrd.data', ['company' => $participant->perusahaan_id]))->assertOk();
         $browser = $this->get(route('pemeriksaan.report', [$participant->rencana_kunjungan_id, $participant]))->assertOk()->assertSee('data-report-print', false)->assertSee('Catatan singkat');
+        $this->actingAs(User::factory()->create(['role' => 'hrd', 'perusahaan_id' => $participant->perusahaan_id, 'name' => 'HRD Demo']));
+        $readonly = $this->get(route('pemeriksaan.edit', [$participant->rencana_kunjungan_id, $participant, 'tab' => 'kesimpulan', 'from_dashboard' => 1]))->assertOk()->assertSee('Hanya baca')->assertDontSee('data-exam-form', false);
+        $csv = $this->get(route('hrd.recap'))->assertOk()->assertDownload('Rekap_MCU.csv');
         $renderer = new McuPdf(new McuReport);
         $short = $renderer->render($participant);
         $output = getenv('MCU_PRESENTATION_OUTPUT');
@@ -62,7 +66,11 @@ class HrdPresentationTest extends TestCase
             File::ensureDirectoryExists($output);
             File::put($output.'/dashboard.html', $dashboard->getContent());
             File::put($output.'/data.json', $data->getContent());
+            File::put($output.'/workspace.json', $workspace->getContent());
             File::put($output.'/browser-report.html', $browser->getContent());
+            File::put($output.'/readonly-examination.html', $readonly->getContent());
+            File::put($output.'/participant-photo.webp', Storage::disk('local')->get($participant->foto));
+            File::put($output.'/Rekap_MCU.csv', $csv->streamedContent());
             File::put($output.'/short.pdf', $short);
             File::put($output.'/long.pdf', $long);
         }

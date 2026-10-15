@@ -20,12 +20,13 @@ class HrdAnalytics
     /** @param array<string, mixed> $filters
      * @return array{sources: array<string, array<string, mixed>>, records: list<array<string, mixed>>, planned: ?int}
      */
-    public function dataset(Perusahaan $company, array $filters): array
+    public function dataset(?Perusahaan $company, array $filters): array
     {
-        $visits = $company->rencanaKunjungans()->with('pakets')->when($filters['visit'] ?? null, fn ($query, $id) => $query->whereKey($id))
+        $visits = RencanaKunjungan::query()->when($company, fn ($query) => $query->where('perusahaan_id', $company->id))->with('pakets')->when($filters['visit'] ?? null, fn ($query, $id) => $query->whereKey($id))
+            ->dashboardStatus($filters['visit_status'] ?? null)
             ->when($filters['period'] ?? null, fn ($query, $period) => $query->where('periode_kunjungan', $period))->get();
         $examColumns = array_diff((new Anamnesa)->getFillable(), ['revisions', 'dynamic_attachments', 'category_doctors']);
-        $participants = Karyawan::where('perusahaan_id', $company->id)->whereIn('rencana_kunjungan_id', $visits->modelKeys())
+        $participants = Karyawan::query()->when($company, fn ($query) => $query->where('perusahaan_id', $company->id))->whereIn('rencana_kunjungan_id', $visits->modelKeys())
             ->when($filters['package'] ?? null, fn ($query, $id) => $query->where('paket_id', $id))
             ->with(['anamnesa' => fn ($query) => $query->select(['id', ...$examColumns]), 'paket', 'rencanaKunjungan'])
             ->select(['id', 'perusahaan_id', 'rencana_kunjungan_id', 'paket_id', 'nama_karyawan', 'nomor_mcu', 'nip', 'bagian', 'jenis_kelamin', 'tanggal_lahir', 'tanggal_mcu', 'is_closing', 'status_pemeriksaan'])
@@ -138,7 +139,8 @@ class HrdAnalytics
                 }
             }
             $records[] = ['id' => $participant->id, 'name' => $participant->nama_karyawan, 'number' => $participant->nomor_mcu, 'employee' => $participant->nip,
-                'status' => $participant->status_pemeriksaan, 'final' => $participant->status_pemeriksaan === 'selesai' && $exam?->status === 'final', 'released' => $released, 'values' => $values];
+                'status' => $participant->status_pemeriksaan, 'final' => $participant->status_pemeriksaan === 'selesai' && $exam?->status === 'final', 'released' => $released,
+                'examination_url' => $released ? route('pemeriksaan.edit', [$participant->rencana_kunjungan_id, $participant->id]) : null, 'values' => $values];
         }
         $planned = $visits->isNotEmpty() && $visits->every(fn (RencanaKunjungan $visit): bool => $visit->jumlah_peserta_direncanakan !== null) ? (int) $visits->sum('jumlah_peserta_direncanakan') : null;
         foreach (['laboratory' => '10 temuan laboratorium terbanyak', 'supporting' => '10 temuan penunjang terbanyak'] as $family => $title) {

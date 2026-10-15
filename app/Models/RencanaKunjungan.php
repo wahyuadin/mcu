@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -45,6 +46,12 @@ class RencanaKunjungan extends Model implements Auditable
             'jumlah_peserta_direncanakan' => 'integer',
             'is_closing' => 'boolean',
         ];
+    }
+
+    public function scopeDashboardStatus(Builder $query, ?string $status): Builder
+    {
+        return $query->when($status === 'closed', fn (Builder $query): Builder => $query->where('is_closing', true))
+            ->when(in_array($status, ['draft', 'ongoing', 'completed'], true), fn (Builder $query): Builder => $query->where('status', $status)->where('is_closing', false));
     }
 
     /**

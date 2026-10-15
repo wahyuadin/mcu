@@ -127,8 +127,9 @@ class GenerateMcuExport implements ShouldQueue
             }
             $disk->deleteDirectory($directory);
             $export->update(['status' => 'failed', 'path' => null]);
-            Log::warning('Pembuatan ZIP MCU gagal.', ['export_id' => $export->id, 'exception_type' => $exception::class]);
-            throw new RuntimeException('Pembuatan ZIP MCU gagal. Tidak ada laporan parsial yang dirilis.');
+            Log::warning('Pembuatan ZIP MCU gagal.', ['export_id' => $export->id, 'exception_type' => $exception::class,
+                'cause' => $exception instanceof RuntimeException ? $exception->getMessage() : 'Kesalahan pemrosesan laporan.']);
+            throw new RuntimeException('Pembuatan ZIP MCU gagal. Tidak ada laporan parsial yang dirilis.', 0, $exception);
         }
     }
 

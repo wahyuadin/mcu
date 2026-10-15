@@ -16,7 +16,7 @@ class McuPdf
     /** @var array<string, string> */
     private array $brandAssets = [];
 
-    public function __construct(private McuReport $reports) {}
+    public function __construct(private McuReport $reports, private MedicalImage $images = new MedicalImage) {}
 
     public function render(Karyawan $participant, ?string $workingDirectory = null): string
     {
@@ -25,50 +25,50 @@ class McuPdf
         if (! $participant->is_closing || $participant->status_pemeriksaan !== 'selesai' || $participant->anamnesa?->status !== 'final') {
             throw new RuntimeException('Laporan belum dirilis.');
         }
-        $sections = $this->reports->sections($participant, $participant->anamnesa);
-        foreach ($sections as &$section) {
-            foreach ($section['groups'] as &$group) {
-                $rows = [];
-                foreach ($group['rows'] as $row) {
-                    $fields = [];
-                    foreach (['label', 'value', 'unit', 'reference', 'remark'] as $field) {
-                        $width = $section['kind'] === 'laboratory' ? (['label' => 28, 'value' => 14, 'unit' => 14, 'reference' => 24, 'remark' => 20][$field]) : ($field === 'label' ? 30 : 70);
-                        $fields[$field] = $this->fragments((string) ($row[$field] ?? ''), $width);
-                    }
-                    $count = max(array_map('count', $fields));
-                    for ($index = 0; $index < $count; $index++) {
-                        $fragment = $row;
-                        foreach ($fields as $field => $parts) {
-                            $fragment[$field] = $parts[$index] ?? '';
-                        }
-                        $rows[] = $fragment;
-                    }
-                }
-                $group['rows'] = $rows;
-            }
-            unset($group);
-            foreach ($section['attachments'] as &$attachment) {
-                $attachment['image'] = $attachment['mime'] === 'application/pdf' ? null : $this->image($attachment['path'], $participant);
-                if ($attachment['image']) {
-                    $attachment += $this->imageSize($attachment['image'], 515, 350);
-                }
-            }
-            unset($attachment);
-        }
-        unset($section);
-        $photo = $participant->foto ? $this->image($participant->foto, $participant) : null;
-        $options = new Options;
         $temporaryDirectory = ($workingDirectory ?? 'mcu-pdf').'/'.Str::uuid();
         Storage::disk('local')->makeDirectory($temporaryDirectory);
-        $options->set('tempDir', Storage::disk('local')->path($temporaryDirectory));
-        $options->set('isRemoteEnabled', false);
-        $options->set('isPhpEnabled', false);
-        $options->set('isJavascriptEnabled', false);
-        $options->set('chroot', [public_path(), Storage::disk('local')->path('mcu/'.$participant->id)]);
-        $options->set('defaultFont', 'DejaVu Sans');
-        $pdf = new Dompdf($options);
-        $pdf->setPaper('A4');
         try {
+            $sections = $this->reports->sections($participant, $participant->anamnesa);
+            foreach ($sections as &$section) {
+                foreach ($section['groups'] as &$group) {
+                    $rows = [];
+                    foreach ($group['rows'] as $row) {
+                        $fields = [];
+                        foreach (['label', 'value', 'unit', 'reference', 'remark'] as $field) {
+                            $width = $section['kind'] === 'laboratory' ? (['label' => 28, 'value' => 14, 'unit' => 14, 'reference' => 24, 'remark' => 20][$field]) : ($field === 'label' ? 30 : 70);
+                            $fields[$field] = $this->fragments((string) ($row[$field] ?? ''), $width);
+                        }
+                        $count = max(array_map('count', $fields));
+                        for ($index = 0; $index < $count; $index++) {
+                            $fragment = $row;
+                            foreach ($fields as $field => $parts) {
+                                $fragment[$field] = $parts[$index] ?? '';
+                            }
+                            $rows[] = $fragment;
+                        }
+                    }
+                    $group['rows'] = $rows;
+                }
+                unset($group);
+                foreach ($section['attachments'] as &$attachment) {
+                    $attachment['image'] = $attachment['mime'] === 'application/pdf' ? null : $this->image($attachment['path'], $participant, $temporaryDirectory);
+                    if ($attachment['image']) {
+                        $attachment += $this->imageSize($attachment['image'], 515, 350);
+                    }
+                }
+                unset($attachment);
+            }
+            unset($section);
+            $photo = $participant->foto ? $this->image($participant->foto, $participant, $temporaryDirectory) : null;
+            $options = new Options;
+            $options->set('tempDir', Storage::disk('local')->path($temporaryDirectory));
+            $options->set('isRemoteEnabled', false);
+            $options->set('isPhpEnabled', false);
+            $options->set('isJavascriptEnabled', false);
+            $options->set('chroot', [public_path(), Storage::disk('local')->path('mcu/'.$participant->id)]);
+            $options->set('defaultFont', 'DejaVu Sans');
+            $pdf = new Dompdf($options);
+            $pdf->setPaper('A4');
             $pdf->loadHtml(view('mcu.laporan-pdf', [
                 'peserta' => $participant, 'exam' => $participant->anamnesa, 'sections' => $sections,
                 'photo' => $photo,
@@ -113,14 +113,17 @@ class McuPdf
         return array_map(fn (array $chunk): string => implode("\n", $chunk), array_chunk($lines, 8));
     }
 
-    private function image(string $path, Karyawan $participant): string
+    private function image(string $path, Karyawan $participant, string $temporaryDirectory): string
     {
         $disk = Storage::disk('local');
         if (! str_starts_with($path, 'mcu/'.$participant->id.'/') || str_contains($path, '..') || ! $disk->exists($path)) {
             throw new RuntimeException('Gambar laporan tidak tersedia.');
         }
 
-        return $this->encodeImage($disk->get($path));
+        $destination = $disk->path($temporaryDirectory.'/'.Str::uuid().'.jpg');
+        $this->images->normalize($disk->path($path), $destination, 'jpeg', 1240, 1754, 90);
+
+        return 'data:image/jpeg;base64,'.base64_encode(file_get_contents($destination));
     }
 
     /** @return array{width: float, height: float} */
@@ -130,36 +133,5 @@ class McuPdf
         $scale = min($maximumWidth / $dimensions[0], $maximumHeight / $dimensions[1]);
 
         return ['width' => round($dimensions[0] * $scale, 2), 'height' => round($dimensions[1] * $scale, 2)];
-    }
-
-    private function encodeImage(string $bytes): string
-    {
-        $dimensions = @getimagesizefromstring($bytes);
-        if (! $dimensions || $dimensions[0] * $dimensions[1] > 12000000) {
-            throw new RuntimeException('Gambar laporan terlalu besar atau tidak valid.');
-        }
-        $limit = ini_parse_quantity(ini_get('memory_limit'));
-        if ($limit > 0 && memory_get_usage(true) + $dimensions[0] * $dimensions[1] * 8 + 16000000 > $limit) {
-            throw new RuntimeException('Memori tidak cukup untuk memproses gambar laporan.');
-        }
-        $image = @imagecreatefromstring($bytes);
-        if (! $image) {
-            throw new RuntimeException('Gambar laporan tidak valid.');
-        }
-        $scale = min(1, 1240 / imagesx($image), 1754 / imagesy($image));
-        $canvas = imagecreatetruecolor(max(1, (int) (imagesx($image) * $scale)), max(1, (int) (imagesy($image) * $scale)));
-        imagefill($canvas, 0, 0, imagecolorallocate($canvas, 255, 255, 255));
-        imagecopyresampled($canvas, $image, 0, 0, 0, 0, imagesx($canvas), imagesy($canvas), imagesx($image), imagesy($image));
-        imagedestroy($image);
-        ob_start();
-        try {
-            imagejpeg($canvas, null, 90);
-            $bytes = ob_get_contents();
-        } finally {
-            ob_end_clean();
-            imagedestroy($canvas);
-        }
-
-        return 'data:image/jpeg;base64,'.base64_encode($bytes);
     }
 }

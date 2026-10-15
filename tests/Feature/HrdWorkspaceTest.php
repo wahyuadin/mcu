@@ -29,7 +29,7 @@ class HrdWorkspaceTest extends TestCase
         $this->getJson(route('hrd.data', ['visit' => $foreign->rencana_kunjungan_id]))->assertNotFound();
         $this->getJson(route('hrd.data', ['package' => $foreign->paket_id]))->assertNotFound();
         $this->get(route('pasien.index'))->assertForbidden();
-        $this->get(route('pemeriksaan.report', [$participant->rencana_kunjungan_id, $participant]))->assertForbidden();
+        $this->get(route('pemeriksaan.report', [$participant->rencana_kunjungan_id, $participant]))->assertNotFound();
         $this->putJson(route('hrd.layout'), ['widgets' => []])->assertForbidden();
     }
 
@@ -240,7 +240,7 @@ class HrdWorkspaceTest extends TestCase
         $this->getJson(route('hrd.participants.show', $participant))->assertOk()->assertJsonPath('name', 'Episode perusahaan sendiri')->assertDontSee('Identitas dari perusahaan lain')->assertJsonMissingPath('foto');
         $this->getJson(route('hrd.participants.show', $foreign))->assertNotFound();
         $this->getJson(route('hrd.participants.show', $unreleased))->assertNotFound();
-        $this->get(route('pemeriksaan.attachment', [$foreign->rencana_kunjungan_id, $foreign, 'foto']))->assertForbidden();
+        $this->get(route('pemeriksaan.attachment', [$foreign->rencana_kunjungan_id, $foreign, 'foto']))->assertNotFound();
     }
 
     public function test_cached_company_data_is_not_accessible_after_reassignment_and_filters_have_no_fake_target(): void

@@ -2,6 +2,7 @@ import './patient-photo';
 import './checkpoint-print';
 import './planning-dates';
 import './package-selection';
+import './package-builder';
 import './master-item';
 import './item-order';
 import './patient-import';
@@ -39,17 +40,3 @@ if (examForm) {
         event.returnValue = '';
     });
 }
-
-document.querySelectorAll('[data-package-toggle]').forEach((button) => {
-    button.addEventListener('click', () => {
-        const inputs = [...button.closest('[data-package-group]').querySelectorAll('input[type="checkbox"]')];
-        const select = inputs.some((input) => !input.checked);
-        inputs.forEach((input) => { input.checked = select; });
-    });
-});
-
-document.querySelector('[data-package-full]')?.addEventListener('click', () => {
-    document.querySelectorAll('[data-package-group] input[type="checkbox"]').forEach((input) => {
-        input.checked = !['asma', 'ginjal'].includes(input.value);
-    });
-});

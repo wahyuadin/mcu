@@ -20,6 +20,7 @@ use App\Http\Controllers\PatientImportController;
 use App\Http\Controllers\PemeriksaanController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicAnamnesaController;
+use App\Http\Controllers\SavedDashboardController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -33,28 +34,32 @@ Route::prefix('anamnesa/{token}')->where(['token' => '[a-f0-9]{64}'])->middlewar
 });
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthController::class, 'create'])->name('login');
-    Route::post('/login', [AuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
+    Route::post('/login', [AuthController::class, 'store'])->middleware('throttle:5,1,login')->name('login.store');
 });
 Route::middleware('auth')->group(function (): void {
     Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
     Route::get('/dashboard', [McuController::class, 'index'])->name('dashboard');
-    Route::prefix('dashboard')->name('dashboard.')->middleware('can:view-patients')->group(function (): void {
-        Route::get('/data', [DashboardController::class, 'data'])->middleware('throttle:60,1')->name('data');
-        Route::post('/preview', [DashboardController::class, 'preview'])->middleware('throttle:30,1')->name('preview');
-        Route::put('/preferences', [DashboardController::class, 'preferences'])->middleware('throttle:30,1')->name('preferences');
+    Route::prefix('dashboard')->name('dashboard.')->group(function (): void {
+        Route::get('/data', [DashboardController::class, 'data'])->middleware('throttle:60,1,dashboard-data')->name('data');
+        Route::post('/preview', [DashboardController::class, 'preview'])->middleware('throttle:120,1,dashboard-preview')->name('preview');
+        Route::put('/preferences', [DashboardController::class, 'preferences'])->middleware(['can:view-patients', 'throttle:30,1,dashboard-preferences'])->name('preferences');
+        Route::post('/saved', [SavedDashboardController::class, 'store'])->middleware('throttle:30,1,dashboard-saved')->name('saved.store');
+        Route::patch('/saved/{dashboard}', [SavedDashboardController::class, 'update'])->middleware('throttle:30,1,dashboard-saved')->name('saved.update');
+        Route::delete('/saved/{dashboard}', [SavedDashboardController::class, 'destroy'])->middleware('throttle:30,1,dashboard-saved')->name('saved.destroy');
+        Route::put('/selection', [SavedDashboardController::class, 'select'])->middleware('throttle:30,1,dashboard-selection')->name('selection');
     });
     Route::get('/users/{user}/avatar', [UserController::class, 'avatar'])->name('users.avatar');
-    Route::patch('/profil-saya', [ProfileController::class, 'update'])->middleware('throttle:30,1')->name('profile.update');
-    Route::put('/profil-saya/password', [ProfileController::class, 'password'])->middleware('throttle:5,1')->name('profile.password');
+    Route::patch('/profil-saya', [ProfileController::class, 'update'])->middleware('throttle:30,1,profile-update')->name('profile.update');
+    Route::put('/profil-saya/password', [ProfileController::class, 'password'])->middleware('throttle:5,1,profile-password')->name('profile.password');
     Route::prefix('hrd')->name('hrd.')->middleware('can:view-hrd')->group(function (): void {
         Route::get('/', [HrdController::class, 'index'])->name('index');
-        Route::get('/data', [HrdController::class, 'data'])->middleware('throttle:60,1')->name('data');
-        Route::get('/participants/{participant}', [HrdController::class, 'participant'])->whereUuid('participant')->middleware('throttle:60,1')->name('participants.show');
-        Route::get('/rekap', [HrdController::class, 'recap'])->middleware('throttle:10,1')->name('recap');
+        Route::get('/data', [HrdController::class, 'data'])->middleware('throttle:60,1,hrd-data')->name('data');
+        Route::get('/participants/{participant}', [HrdController::class, 'participant'])->whereUuid('participant')->middleware('throttle:60,1,hrd-participant')->name('participants.show');
+        Route::get('/rekap', [HrdController::class, 'recap'])->middleware('throttle:10,1,hrd-recap')->name('recap');
         Route::put('/layout', [HrdController::class, 'layout'])->middleware('can:manage-mcu')->name('layout');
-        Route::put('/preferences', [HrdController::class, 'preferences'])->middleware('throttle:30,1')->name('preferences');
-        Route::post('/preview', [HrdController::class, 'preview'])->middleware('throttle:30,1')->name('preview');
-        Route::post('/exports', [HrdController::class, 'export'])->middleware('throttle:5,1')->name('exports.store');
+        Route::put('/preferences', [HrdController::class, 'preferences'])->middleware('throttle:30,1,hrd-preferences')->name('preferences');
+        Route::post('/preview', [HrdController::class, 'preview'])->middleware('throttle:30,1,hrd-preview')->name('preview');
+        Route::post('/exports', [HrdController::class, 'export'])->middleware('throttle:5,1,hrd-exports')->name('exports.store');
         Route::get('/exports/{export}', [HrdController::class, 'exportStatus'])->name('exports.status');
         Route::get('/exports/{export}/download', [HrdController::class, 'download'])->name('exports.download');
     });
@@ -64,8 +69,6 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/pasien', [PasienController::class, 'index'])->name('pasien.index');
         Route::get('/pasien/{pasien}', [PasienController::class, 'show'])->whereUuid('pasien')->name('pasien.show');
         Route::get('/kunjungan-mcu/{kunjungan}', [McuController::class, 'show'])->name('kunjungan-mcu.show');
-        Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/lampiran/{item}', [PemeriksaanController::class, 'attachment'])->name('pemeriksaan.attachment');
-        Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/laporan', [PemeriksaanController::class, 'report'])->name('pemeriksaan.report');
         Route::get('/laporan-riwayat', [LaporanRiwayatController::class, 'index'])->name('laporan-riwayat.index');
         Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/laporan-riwayat', [LaporanRiwayatController::class, 'show'])->name('pemeriksaan.laporan-riwayat');
         Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/laporan-riwayat/versi/{version}', [LaporanRiwayatController::class, 'showVersion'])->name('pemeriksaan.laporan-riwayat.version');
@@ -105,7 +108,7 @@ Route::middleware('auth')->group(function (): void {
         Route::resource('paket', PaketController::class)->parameters(['paket' => 'paket']);
         Route::get('/pasien/create', [PasienController::class, 'create'])->name('pasien.create');
         Route::get('/pasien/import/template', [PatientImportController::class, 'template'])->name('pasien.import.template');
-        Route::post('/pasien/import', [PatientImportController::class, 'store'])->middleware('throttle:10,1')->name('pasien.import.store');
+        Route::post('/pasien/import', [PatientImportController::class, 'store'])->middleware('throttle:10,1,patient-import')->name('pasien.import.store');
         Route::get('/pasien/import/{batch}', [PatientImportController::class, 'show'])->name('pasien.import.show');
         Route::patch('/pasien/import/{batch}', [PatientImportController::class, 'update'])->name('pasien.import.update');
         Route::post('/pasien/import/{batch}/confirm', [PatientImportController::class, 'confirm'])->name('pasien.import.confirm');
@@ -117,12 +120,16 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/kunjungan-mcu/{kunjungan}/peserta', [McuController::class, 'storePeserta'])->name('peserta.store');
         Route::get('/audit', [McuController::class, 'audits'])->name('audits.index');
     });
+    Route::middleware('can:view-examination,peserta')->group(function (): void {
+        Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/pemeriksaan', [PemeriksaanController::class, 'edit'])->name('pemeriksaan.edit');
+        Route::get('/{kunjungan}/peserta/{peserta}/pemeriksaan', [PemeriksaanController::class, 'edit'])->whereUuid(['kunjungan', 'peserta'])->name('pemeriksaan.scan');
+        Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/lampiran/{item}', [PemeriksaanController::class, 'attachment'])->name('pemeriksaan.attachment');
+        Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/laporan', [PemeriksaanController::class, 'report'])->name('pemeriksaan.report');
+    });
     Route::middleware('can:examine-mcu')->group(function (): void {
         Route::post('/kunjungan-mcu/{kunjungan}/barcode-anamnesa', [PublicAnamnesaController::class, 'barcode'])->name('anamnesa.barcode');
         Route::delete('/kunjungan-mcu/{kunjungan}/barcode-anamnesa', [PublicAnamnesaController::class, 'disable'])->name('anamnesa.disable');
         Route::post('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/foto', [PemeriksaanController::class, 'savePhoto'])->name('pemeriksaan.photo');
-        Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/pemeriksaan', [PemeriksaanController::class, 'edit'])->name('pemeriksaan.edit');
-        Route::get('/{kunjungan}/peserta/{peserta}/pemeriksaan', [PemeriksaanController::class, 'edit'])->whereUuid(['kunjungan', 'peserta'])->name('pemeriksaan.scan');
         Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/checkpoint', [PemeriksaanController::class, 'checkpoint'])->name('pemeriksaan.checkpoint');
         Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/label', [PemeriksaanController::class, 'labels'])->name('pemeriksaan.labels');
         Route::put('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/pemeriksaan', [PemeriksaanController::class, 'update'])->name('pemeriksaan.update');

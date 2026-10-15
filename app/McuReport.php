@@ -67,7 +67,7 @@ class McuReport
             }
             $attachments = [];
             if (! ($data['skipped'] ?? false) && ! empty($data['attachment'])) {
-                $attachments[] = ['key' => $key, 'label' => $definition['label'], 'path' => $data['attachment'], 'mime' => 'image/jpeg'];
+                $attachments[] = ['key' => $key, 'label' => $definition['label'], 'path' => $data['attachment'], 'mime' => $data['attachment_mime'] ?? 'image/jpeg'];
             }
             $sections[] = ['title' => 'HASIL PEMERIKSAAN '.mb_strtoupper($definition['label']), 'kind' => 'detail', 'groups' => [['name' => null, 'rows' => $rows]], 'doctor_id' => $data['doctor_id'] ?? null, 'attachments' => $attachments];
         }

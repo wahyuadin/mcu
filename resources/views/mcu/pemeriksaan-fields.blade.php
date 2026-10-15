@@ -1,13 +1,13 @@
 @if($tab === 'identitas')
     <section class="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6">
         <div class="flex flex-wrap items-center justify-between gap-4"><h3 class="text-lg font-bold">Identitas episode MCU</h3>
-            <details data-print-dropdown class="relative">
+            @if(!$hrdReadonly)<details data-print-dropdown class="relative">
                 <summary class="cursor-pointer list-none rounded-xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white">Cetak ▾</summary>
                 <div class="absolute right-0 z-20 mt-2 grid w-48 gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
                     <button type="button" data-checkpoint-print data-print-url="{{ route('pemeriksaan.checkpoint', [$kunjungan, $peserta]) }}" class="rounded-lg px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50">Cetak PDF</button>
                     <button type="button" data-label-open aria-haspopup="dialog" aria-controls="examination-label-modal" class="rounded-lg px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100">Cetak label</button>
                 </div>
-            </details>
+            </details>@endif
         </div>
         <p data-checkpoint-print-status role="status" aria-live="polite" class="text-sm text-slate-500"></p>
         <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
@@ -19,14 +19,14 @@
                     <div class="min-w-0"><dt class="text-slate-500">{{ $label }}</dt><dd class="mt-2 break-words font-semibold">{{ $value ?: 'Belum diisi' }}</dd></div>
                 @endforeach
             </dl>
-            <figure class="flex shrink-0 flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white p-4 lg:w-44"><img src="{{ $checkpoint['qrDataUri'] }}" alt="QR menuju pemeriksaan pasien" class="h-36 w-36"><figcaption class="text-center text-xs font-semibold text-slate-500">Scan untuk pemeriksaan</figcaption></figure>
+            @if(!$hrdReadonly)<figure class="flex shrink-0 flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white p-4 lg:w-44"><img src="{{ $checkpoint['qrDataUri'] }}" alt="QR menuju pemeriksaan pasien" class="h-36 w-36"><figcaption class="text-center text-xs font-semibold text-slate-500">Scan untuk pemeriksaan</figcaption></figure>@endif
         </div>
         @if(!$readonly)<div class="flex flex-wrap gap-3 border-t border-slate-200 pt-5">
             @can('manage-mcu')<a href="{{ route('pasien.edit', $peserta) }}" class="rounded-xl bg-blue-900 px-5 py-3 text-sm font-semibold text-white">Edit identitas pasien</a>@endcan
             <button type="button" data-photo-modal-open aria-haspopup="dialog" aria-controls="patient-photo-modal" class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"><svg aria-hidden="true" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h4l2-3h4l2 3h4v13H4z"/><circle cx="12" cy="13" r="3" stroke-width="2"/></svg>Ganti foto pasien</button>
         </div>@endif
     </section>
-    @include('mcu.label-modal')
+    @if(!$hrdReadonly) @include('mcu.label-modal') @endif
     @if(!$readonly)
         <dialog id="patient-photo-modal" data-photo-modal @if($errors->has('foto_pasien')) data-photo-modal-errors @endif aria-labelledby="patient-photo-modal-title" class="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-5xl overflow-y-auto rounded-2xl border-0 bg-slate-50 p-0 text-slate-900 shadow-xl">
             <div class="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-slate-200 bg-white p-5"><div><h2 id="patient-photo-modal-title" class="text-lg font-bold">Ganti foto pasien</h2><p class="mt-1 text-sm text-slate-500">{{ $peserta->nama_karyawan }}</p></div><button type="button" data-photo-modal-close autofocus aria-label="Tutup modal foto" class="rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold">Tutup</button></div>
@@ -34,7 +34,7 @@
         </dialog>
     @endif
 @elseif($tab === 'anamnesa')
-    @if($peserta->anamnesa_submission)
+    @if($peserta->anamnesa_submission && !$hrdReadonly)
         <section class="grid gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-6"><h3 class="font-bold">Anamnesa dari peserta</h3><p class="text-sm">Dikirim: {{ \Carbon\Carbon::parse($peserta->anamnesa_submission['submitted_at'])->format('d/m/Y H:i') }} · {{ ($peserta->anamnesa_submission['reviewed_at'] ?? null) ? 'Sudah ditinjau petugas' : 'Menunggu pemeriksaan petugas' }}</p>
             @if($reviewSubmission)<input type="hidden" name="submission_id" value="{{ $peserta->anamnesa_submission['id'] }}"><p class="text-sm font-semibold">Jawaban peserta dimuat untuk ditinjau. Periksa dan koreksi sebelum menekan Simpan. Hasil pemeriksaan belum diubah.</p>
             @elseif(!$readonly && !($peserta->anamnesa_submission['reviewed_at'] ?? null))<a href="{{ route('pemeriksaan.edit', [$kunjungan, $peserta, 'tab' => 'anamnesa', 'review_submission' => 1]) }}" class="justify-self-start rounded-xl bg-blue-900 px-5 py-3 text-sm font-semibold text-white">Tinjau jawaban peserta</a>@endif
@@ -102,7 +102,7 @@
                     @include('mcu.field', ['field' => 'penunjang.'.$key.'.'.$field, 'label' => $label, 'type' => 'textarea', 'value' => $row[$field] ?? null])
                 @endforeach
             </div>
-            <label class="grid gap-2 text-sm font-semibold">Gambar hasil (opsional)<input type="file" name="images[{{ $key }}]" accept="image/jpeg,image/png,image/webp" class="rounded-xl border border-slate-300 p-3"><span class="text-xs font-normal text-slate-500">JPG, PNG, WebP · maksimal 10 MB. Unggahan baru menggantikan gambar aktif; riwayat revisi tetap dipertahankan.</span></label>
+            @if(!$hrdReadonly)<label class="grid gap-2 text-sm font-semibold">Gambar hasil (opsional)<input type="file" name="images[{{ $key }}]" accept="image/jpeg,image/png,image/webp" class="rounded-xl border border-slate-300 p-3"><span class="text-xs font-normal text-slate-500">JPG, PNG, WebP · maksimal 10 MB. Unggahan baru menggantikan gambar aktif; riwayat revisi tetap dipertahankan.</span></label>@endif
             @if(isset($row['attachment']))<a target="_blank" rel="noopener" href="{{ route('pemeriksaan.attachment', [$kunjungan, $peserta, $key]) }}" class="justify-self-start text-sm font-semibold text-[#00008B] underline">Lihat gambar tersimpan ↗</a>@endif
             <details @if($row['skipped'] ?? false) open @endif><summary class="cursor-pointer text-sm text-slate-500">Pemeriksaan tidak dilakukan</summary><div class="mt-3 grid gap-4 sm:grid-cols-2">
                 @include('mcu.field', ['field' => 'penunjang.'.$key.'.skipped', 'label' => 'Tidak dilakukan?', 'type' => 'select', 'value' => ($row['skipped'] ?? false) ? '1' : '0', 'options' => ['0' => 'Tidak — hasil diisi', '1' => 'Ya — wajib isi alasan']])

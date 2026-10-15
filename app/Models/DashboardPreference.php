@@ -15,10 +15,10 @@ class DashboardPreference extends Model implements Auditable
     /** @use HasFactory<DashboardPreferenceFactory> */
     use AuditableTrait, HasFactory, HasUuids, SoftDeletes;
 
-    protected $fillable = ['user_id', 'role', 'widgets', 'deleted_at'];
+    protected $fillable = ['user_id', 'role', 'widgets', 'dashboards', 'active_dashboard', 'default_name', 'default_version', 'deleted_at'];
 
     protected function casts(): array
     {
-        return ['widgets' => 'array'];
+        return ['widgets' => 'array', 'dashboards' => 'array', 'default_version' => 'integer'];
     }
 }

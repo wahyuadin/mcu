@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\CompanyLogo;
+use App\DashboardLibrary;
+use App\DashboardWorkspace;
 use App\Models\Anamnesa;
 use App\Models\Karyawan;
 use App\Models\Paket;
@@ -11,7 +13,6 @@ use App\Models\RencanaKunjungan;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -22,31 +23,19 @@ use Throwable;
 
 class McuController extends Controller
 {
-    public function index(Request $request): View|RedirectResponse
+    public function index(Request $request, DashboardWorkspace $workspace, DashboardLibrary $library): View
     {
-        if ($request->user()->role === 'hrd' || $request->filled('company')) {
-            Gate::authorize('view-hrd');
-            $data = $request->validate(['company' => ['nullable', 'uuid']]);
-            if ($request->user()->role === 'hrd') {
-                abort_if(isset($data['company']) && $data['company'] !== $request->user()->perusahaan_id, 404);
-                $company = $request->user()->perusahaan()->firstOrFail();
-            } else {
-                $company = Perusahaan::findOrFail($data['company']);
-            }
-
-            return view('mcu.hrd-dashboard', ['company' => $company, 'companies' => $request->user()->role === 'admin' ? Perusahaan::orderBy('nama_perusahaan')->get() : collect(),
-                'visits' => $company->rencanaKunjungans()->with('pakets')->latest()->get(), 'canBuild' => true]);
-        }
+        $company = $workspace->company($request, allowLegacyReadOnly: true);
+        $data = $workspace->operationalData($request, $company);
 
         return view('mcu.index', [
+            'company' => $company,
+            'defaultDashboardName' => $library->state($request->user())['default_dashboard']['name'],
+            'canCustomize' => $request->user()->can('view-patients') || $request->user()->can('view-hrd'),
+            'recentVisits' => $data['recent_visits'],
+            'visitOptions' => $workspace->visitOptions($company),
             'companies' => $request->user()->role === 'admin' ? Perusahaan::orderBy('nama_perusahaan')->get(['id', 'nama_perusahaan']) : collect(),
-            'kunjungans' => RencanaKunjungan::with('perusahaan')->withCount(['pakets', 'karyawans'])->latest()->limit(5)->get(),
-            'stats' => [
-                'perusahaan' => Perusahaan::count(),
-                'kunjungan_aktif' => RencanaKunjungan::where('is_closing', false)->count(),
-                'peserta' => Karyawan::count(),
-                'selesai' => Karyawan::where('status_pemeriksaan', 'selesai')->count(),
-            ],
+            'stats' => $data['stats'],
         ]);
     }
 

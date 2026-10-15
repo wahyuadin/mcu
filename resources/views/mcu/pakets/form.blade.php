@@ -1,7 +1,7 @@
 @extends('layouts.mcu')
 @section('title', $paket->exists ? 'Ubah Paket MCU' : 'Buat Paket MCU')
 @section('content')
-<form action="{{ $paket->exists ? route('paket.update', $paket) : route('paket.store') }}" method="POST" class="mx-auto space-y-6">
+<form data-package-builder action="{{ $paket->exists ? route('paket.update', $paket) : route('paket.store') }}" method="POST" class="mx-auto space-y-6">
     @csrf
     @if($paket->exists) @method('PUT') @endif
 
@@ -34,6 +34,13 @@
             <div class="grid gap-3 border-b border-slate-100 px-6 py-5">
                 <h3 class="font-bold text-slate-900">Cakupan pemeriksaan</h3>
                 <p class="text-sm text-slate-500">Pilih item yang sudah dipetakan di master. Anamnesa dan BMI tetap existing. Mapping disalin ke paket saat disimpan.</p><a href="{{ route('mcu-category.index') }}" class="text-sm font-semibold text-[#00008B]">Kelola kategori & mapping →</a><button type="button" data-package-full class="justify-self-start rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-[#00008B]">Pilih semua pemeriksaan</button>
+                <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                    <label for="package-search" class="grid min-w-0 gap-2 text-sm font-semibold text-slate-700">Cari pemeriksaan<input id="package-search" data-package-search type="search" autocomplete="off" enterkeyhint="search" placeholder="Nama item, kategori, atau subkategori…" aria-describedby="package-search-help package-search-status" class="min-h-12 w-full rounded-xl border border-slate-200 px-4 text-base outline-none focus:border-[#00008B] focus:ring-4 focus:ring-blue-100"></label>
+                    <button type="button" data-package-search-clear hidden class="min-h-12 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-600">Hapus pencarian</button>
+                </div>
+                <p id="package-search-help" class="text-xs leading-5 text-slate-500">Hasil berubah langsung saat mengetik. Pilihan yang tidak terlihat tetap tersimpan dalam form.</p>
+                <p id="package-search-status" data-package-search-status role="status" aria-live="polite" class="text-xs font-semibold text-blue-800"></p>
+                <p data-package-search-empty hidden class="rounded-xl bg-amber-50 p-4 text-sm text-amber-800">Tidak ada pemeriksaan yang cocok. Coba kata kunci lain atau hapus pencarian.</p>
             </div>
             <div class="grid gap-4 p-5 xl:grid-cols-2">
                 @php
@@ -52,7 +59,7 @@
                         <fieldset data-package-group class="min-w-0 grid gap-2 rounded-xl border border-slate-100 p-3">
                             @if($groupedItems->first()->subcategory)<legend class="px-2 text-sm font-semibold">{{ $groupedItems->first()->subcategory->name }}</legend><button type="button" data-package-toggle class="justify-self-start text-xs font-semibold text-[#00008B]">Pilih / lepas semua subkategori</button>@endif
                             @foreach($groupedItems as $item)
-                            <label class="flex cursor-pointer items-start gap-3 rounded-xl p-2 hover:bg-blue-50">
+                            <label data-package-search-item data-package-search-text="{{ $category->name }} {{ $item->subcategory?->name }} {{ $item->label }} {{ $item->inputLabel() }} {{ $item->lab_config['unit'] ?? '' }} {{ $item->lab_config['reference'] ?? '' }}" class="flex cursor-pointer items-start gap-3 rounded-xl p-2 hover:bg-blue-50">
                                 <input type="checkbox" name="master_items[]" value="{{ $item->id }}" @checked(in_array($item->id, $selectedMasters, true) || (!session()->hasOldInput() && $item->input_type === 'existing' && $paket->isItemActive($item->legacy_key))) class="mt-1 h-4 w-4 shrink-0 accent-[#00008B]">
                                 <span class="min-w-0 text-sm"><strong class="block break-words font-semibold">{{ $item->label }}</strong><span class="mt-1 block text-xs text-slate-500">{{ $item->inputLabel() }}</span>
                                     @if($item->input_type === 'radio')<span class="mt-1 block break-words text-xs text-slate-500">YA → {{ $item->yes_report }} · TIDAK → {{ $item->no_report }}</span>@endif
@@ -83,7 +90,7 @@
                     <button type="button" data-package-toggle class="mb-3 text-xs font-semibold text-[#00008B]">Pilih / lepas semua dalam kelompok</button>
                     <div class="grid gap-2.5">
                         @foreach($items as $key => $label)
-                        <label class="group flex cursor-pointer items-start gap-3 rounded-xl p-2.5 transition-colors hover:bg-blue-50">
+                        <label data-package-search-item data-package-search-text="{{ ['anamnesa_riwayat' => 'Anamnesa Pasien', 'antropometri_vital' => 'Hasil Pemeriksaan Fisik'][$group] ?? ucwords(str_replace('_', ' ', $group)) }} {{ $label }}" class="group flex cursor-pointer items-start gap-3 rounded-xl p-2.5 transition-colors hover:bg-blue-50">
                             <input type="checkbox" name="items[]" value="{{ $key }}" @checked(in_array($key, $selectedItems, true)) class="mt-0.5 h-4 w-4 rounded border-slate-300 accent-[#00008B]">
                             <span class="text-sm leading-5 text-slate-600 group-hover:text-slate-900">{{ $label }}</span>
                         </label>
