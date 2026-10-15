@@ -64,7 +64,7 @@
         </section>
         @if($exam->status === 'final')
             <section class="grid gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-6"><h3 class="font-bold text-emerald-900">Hasil final — hanya baca</h3><p class="text-sm">Difinalisasi {{ $exam->finalized_at?->format('d/m/Y H:i') ?? '(hasil lama)' }}. Koreksi harus melalui revisi beralasan.</p>
-                @if(!$kunjungan->is_closing)<form method="POST" action="{{ route('pemeriksaan.revise', [$kunjungan, $peserta]) }}" class="grid gap-3">@csrf
+                @if(!$kunjungan->is_closing && !$peserta->is_closing)<form method="POST" action="{{ route('pemeriksaan.revise', [$kunjungan, $peserta]) }}" class="grid gap-3">@csrf
                     @include('mcu.field', ['field' => 'reason', 'label' => 'Alasan revisi (wajib)', 'type' => 'textarea', 'value' => null])
                     <button class="justify-self-start rounded-xl border border-emerald-700 px-5 py-3 font-semibold text-emerald-900">Buka revisi hasil</button>
                 </form>@endif

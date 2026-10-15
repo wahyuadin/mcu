@@ -10,6 +10,9 @@ import './laboratory-results';
 import './public-anamnesa';
 import './examination-label';
 import './mcu-report';
+import './user-management';
+import './account-menu';
+import './hrd-dashboard';
 
 const examForm = document.querySelector('[data-exam-form]');
 

@@ -21,8 +21,12 @@ use Throwable;
 
 class McuController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View|RedirectResponse
     {
+        if ($request->user()->role === 'hrd') {
+            return redirect()->route('hrd.index');
+        }
+
         return view('mcu.index', [
             'kunjungans' => RencanaKunjungan::with('perusahaan')->withCount(['pakets', 'karyawans'])->latest()->limit(5)->get(),
             'stats' => [
@@ -187,6 +191,7 @@ class McuController extends Controller
             'periode_kunjungan' => ['required', 'string', 'max:255'],
             'tgl_mulai' => ['nullable', 'date'],
             'tgl_selesai' => ['nullable', 'date', 'after_or_equal:tgl_mulai'],
+            'jumlah_peserta_direncanakan' => ['nullable', 'integer', 'min:1', 'max:1000000'],
         ]);
         $kunjungan = RencanaKunjungan::create($data);
 
@@ -234,6 +239,21 @@ class McuController extends Controller
         ]);
     }
 
+    public function updatePlanning(Request $request, RencanaKunjungan $kunjungan): RedirectResponse
+    {
+        $data = $request->validate(['jumlah_peserta_direncanakan' => ['required', 'integer', 'min:1', 'max:1000000']]);
+        DB::transaction(function () use ($data, $kunjungan): void {
+            $visit = RencanaKunjungan::whereKey($kunjungan->id)->lockForUpdate()->firstOrFail();
+            abort_if($visit->is_closing, 403);
+            if ($data['jumlah_peserta_direncanakan'] < $visit->karyawans()->count()) {
+                throw ValidationException::withMessages(['jumlah_peserta_direncanakan' => 'Target tidak boleh lebih kecil dari peserta terdaftar.']);
+            }
+            $visit->update($data);
+        });
+
+        return back()->with('success', 'Jumlah peserta direncanakan diperbarui. Kuota pendaftaran tidak berubah.');
+    }
+
     public function bindPackage(Request $request, RencanaKunjungan $kunjungan): RedirectResponse
     {
         $data = $request->validate(['paket_id' => ['required', Rule::exists('pakets', 'id')->whereNull('deleted_at')]]);
@@ -265,13 +285,18 @@ class McuController extends Controller
     public function updateStatus(Request $request, RencanaKunjungan $kunjungan): RedirectResponse
     {
         $data = $request->validate(['status' => ['required', Rule::in(['ongoing', 'completed', 'closed'])]]);
-        DB::transaction(function () use ($data, $kunjungan): void {
+        DB::transaction(function () use ($data, $kunjungan, $request): void {
             $visit = RencanaKunjungan::whereKey($kunjungan->id)->lockForUpdate()->firstOrFail();
             abort_if($visit->is_closing, 403);
             if ($data['status'] !== 'ongoing' && ($visit->karyawans()->doesntExist() || $visit->karyawans()->whereNotIn('status_pemeriksaan', ['selesai', 'batal', 'tidak_hadir'])->exists())) {
                 throw ValidationException::withMessages(['status' => 'Semua peserta harus final, batal, atau tidak hadir sebelum kegiatan diselesaikan/ditutup.']);
             }
             $visit->update(['status' => $data['status'] === 'closed' ? 'completed' : $data['status'], 'is_closing' => $data['status'] === 'closed']);
+            if ($data['status'] === 'closed') {
+                foreach ($visit->karyawans()->where('status_pemeriksaan', 'selesai')->whereHas('anamnesa', fn ($query) => $query->where('status', 'final'))->where('is_closing', false)->get() as $participant) {
+                    $participant->update(['is_closing' => true, 'released_at' => now(), 'released_by' => $request->user()->id]);
+                }
+            }
         });
 
         return back()->with('success', 'Status kunjungan diperbarui.');
@@ -284,7 +309,7 @@ class McuController extends Controller
         DB::transaction(function () use ($data, $kunjungan, $peserta): void {
             $visit = RencanaKunjungan::whereKey($kunjungan->id)->lockForUpdate()->firstOrFail();
             $peserta->refresh();
-            abort_if($visit->is_closing || $peserta->anamnesa?->status === 'final', 403);
+            abort_if($visit->is_closing || $peserta->is_closing || $peserta->anamnesa?->status === 'final', 403);
             $peserta->update(['status_pemeriksaan' => $data['status'] === 'belum' && $peserta->anamnesa ? 'proses' : $data['status'], 'alasan_status' => $data['reason']]);
         });
 

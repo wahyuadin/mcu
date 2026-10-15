@@ -197,7 +197,7 @@ class CategoryExaminationTabsTest extends TestCase
         $this->put($url, ['section' => $section, 'status' => 'draft', 'lock_version' => 0])->assertForbidden();
         $other = Karyawan::factory()->create();
         $this->get(route('pemeriksaan.edit', [$other->rencanaKunjungan, $participant, 'tab' => $section]))->assertNotFound();
-        $this->actingAs(User::factory()->create(['role' => 'dokter']));
+        $this->actingAs(User::factory()->create(['role' => 'petugas']));
         $this->put($url, ['section' => $section, 'status' => 'draft', 'lock_version' => 0])->assertForbidden();
         $this->assertDatabaseCount('anamnesas', 0);
     }

@@ -38,7 +38,7 @@ class PemeriksaanController extends Controller
         $exam = $peserta->anamnesa ?? new Anamnesa;
         $labelService = new ExaminationLabel;
         $labelTarget = $labelService->navigationTarget($peserta, $exam, $request->query('tab'), $request->query('subcategory'));
-        $readonly = $kunjungan->is_closing || $exam->status === 'final' || in_array($peserta->status_pemeriksaan, ['batal', 'tidak_hadir'], true);
+        $readonly = $kunjungan->is_closing || $peserta->is_closing || $exam->status === 'final' || in_array($peserta->status_pemeriksaan, ['batal', 'tidak_hadir'], true);
         if (! $readonly && (! $peserta->hasStoredPhoto() || $request->query('tab') === 'foto')) {
             return view('mcu.pemeriksaan-foto', ['kunjungan' => $kunjungan, 'peserta' => $peserta, 'hasPhoto' => $peserta->hasStoredPhoto(), 'labelTarget' => $labelTarget]);
         }
@@ -616,7 +616,7 @@ class PemeriksaanController extends Controller
     {
         $locked = RencanaKunjungan::whereKey($visit->id)->lockForUpdate()->firstOrFail();
         $participant->refresh();
-        abort_if($locked->is_closing || in_array($participant->status_pemeriksaan, ['batal', 'tidak_hadir'], true), 403);
+        abort_if($locked->is_closing || $participant->is_closing || in_array($participant->status_pemeriksaan, ['batal', 'tidak_hadir'], true), 403);
     }
 
     private function assertParticipant(RencanaKunjungan $kunjungan, Karyawan $peserta): void

@@ -29,6 +29,7 @@ class RencanaKunjungan extends Model implements Auditable
         'tgl_mulai',
         'tgl_selesai',
         'kuota_peserta',
+        'jumlah_peserta_direncanakan',
         'is_closing',
         'status',
         'catatan',
@@ -41,6 +42,7 @@ class RencanaKunjungan extends Model implements Auditable
             'tgl_mulai' => 'date',
             'tgl_selesai' => 'date',
             'kuota_peserta' => 'integer',
+            'jumlah_peserta_direncanakan' => 'integer',
             'is_closing' => 'boolean',
         ];
     }

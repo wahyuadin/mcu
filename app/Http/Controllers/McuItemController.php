@@ -16,9 +16,13 @@ class McuItemController extends Controller
 {
     public function index(Request $request): View
     {
+        $data = $request->validate(['category' => ['nullable', 'uuid'], 'q' => ['nullable', 'string', 'max:255']]);
+        $search = trim($data['q'] ?? '');
+
         return view('mcu.masters.items', [
-            'items' => McuItem::with('category', 'subcategory')->when($request->filled('category'), fn ($query) => $query->where('mcu_category_id', $request->query('category')))->orderBy('sort_order')->orderBy('label')->paginate(30)->withQueryString(),
+            'items' => McuItem::with('category', 'subcategory')->when($data['category'] ?? null, fn ($query, $category) => $query->where('mcu_category_id', $category))->when($search !== '', fn ($query) => $query->where('label', 'like', '%'.$search.'%'))->orderBy('sort_order')->orderBy('label')->paginate(30)->withQueryString(),
             'categories' => McuCategory::orderBy('name')->get(),
+            'search' => $search,
         ]);
     }
 

@@ -39,6 +39,23 @@ class McuMasterActionsTest extends TestCase
         $this->get(route('mcu-category.index', ['q' => ['invalid']]))->assertSessionHasErrors('q');
     }
 
+    public function test_item_search_combines_category_filter_and_keeps_filters_in_pagination(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+        $category = McuCategory::factory()->create();
+        McuItem::factory()->count(31)->create(['mcu_category_id' => $category->id, 'label' => 'Hemoglobin khusus']);
+        McuItem::factory()->create(['mcu_category_id' => $category->id, 'label' => 'Leukosit']);
+        McuItem::factory()->create(['label' => 'Hemoglobin kategori lain']);
+
+        $this->get(route('mcu-item.index', ['q' => '  Hemoglobin  ', 'category' => $category->id]))->assertOk()
+            ->assertSee('Hemoglobin khusus')->assertDontSee('Leukosit')->assertDontSee('Hemoglobin kategori lain')
+            ->assertViewHas('search', 'Hemoglobin')
+            ->assertViewHas('items', fn ($items): bool => $items->total() === 31 && str_contains($items->nextPageUrl(), 'q=') && str_contains($items->nextPageUrl(), 'category='.$category->id));
+        $this->get(route('mcu-item.index', ['q' => 'Tidak ditemukan']))->assertOk()->assertSee('Tidak ada item yang cocok');
+        $this->get(route('mcu-item.index'))->assertOk()->assertViewHas('items', fn ($items): bool => $items->total() === 33);
+        $this->get(route('mcu-item.index', ['q' => ['invalid']]))->assertSessionHasErrors('q');
+    }
+
     public function test_deleting_master_item_then_empty_category_preserves_saved_mapping(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));

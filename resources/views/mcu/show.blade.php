@@ -30,6 +30,7 @@
         </div>
     </section>
     <section class="grid gap-3 rounded-2xl border border-slate-200 bg-white p-6">
+        <p class="text-sm text-slate-500">Target peserta: <strong>{{ $kunjungan->jumlah_peserta_direncanakan ?? 'Belum diatur' }}</strong></p>
         <div class="flex flex-wrap items-center justify-between gap-3 text-sm"><h3 class="font-bold">Progres kunjungan</h3><span class="font-semibold text-slate-500">{{ $counts['selesai'] ?? 0 }} dari {{ $totalParticipants }} hasil final · {{ $finalizedPercent }}%</span></div>
         <progress value="{{ $counts['selesai'] ?? 0 }}" max="{{ max(1, $totalParticipants) }}" aria-label="Progres hasil final kunjungan" class="exam-completion h-2.5 w-full overflow-hidden rounded-full">{{ $finalizedPercent }}%</progress>
         <p class="text-xs text-slate-500">Progres hasil final dihitung dari seluruh peserta terdaftar. Batal dan tidak hadir dicatat terpisah.</p>
@@ -63,6 +64,12 @@
                         <div class="min-w-0"><progress value="{{ $completion['completed'] }}" max="{{ max(1, $completion['total']) }}" aria-label="Progres pemeriksaan {{ $peserta->nama_karyawan }}" class="exam-completion h-1.5 w-full overflow-hidden rounded-full">{{ $completion['percent'] }}%</progress></div>
                         @can('examine-mcu')<a href="{{ route('pemeriksaan.edit', [$kunjungan, $peserta]) }}" class="rounded-xl border border-slate-300 px-4 py-3 text-center text-sm font-bold hover:border-emerald-700 hover:bg-emerald-50">{{ $kunjungan->is_closing || in_array($peserta->status_pemeriksaan, ['selesai', 'batal', 'tidak_hadir'], true) ? 'Lihat hasil' : ($peserta->status_pemeriksaan === 'siap_finalisasi' ? 'Review hasil' : ($peserta->status_pemeriksaan === 'belum' ? 'Mulai pengisian' : 'Buka pemeriksaan')) }} →</a>@else<a href="{{ route('pasien.show', $peserta) }}" class="rounded-xl border border-slate-300 px-4 py-3 text-center text-sm font-semibold">Lihat peserta →</a>@endcan
                     </article>
+                    @can('manage-mcu')
+                        @if($peserta->is_closing)<p class="pb-4 text-xs font-semibold text-emerald-700">Hasil ditutup · Sudah dirilis ke HRD</p>
+                        @elseif($peserta->status_pemeriksaan === 'selesai' && $peserta->anamnesa?->status === 'final')
+                            <form method="POST" action="{{ route('peserta.release', [$kunjungan, $peserta]) }}" class="grid gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">@csrf<input type="hidden" name="lock_version" value="{{ $peserta->anamnesa->lock_version }}"><label class="flex min-h-11 items-start gap-3 py-2 text-sm"><input type="checkbox" name="confirmed" value="1" required class="mt-1 h-4 w-4 shrink-0 accent-emerald-700">Saya telah meninjau hasil {{ $peserta->nama_karyawan }}. Rilis mengunci revisi dan membuka unduhan HRD.</label><button class="min-h-11 justify-self-start rounded-xl bg-emerald-700 px-4 py-3 text-sm font-semibold text-white">Tutup hasil peserta / Rilis ke HRD</button></form>
+                        @endif
+                    @endcan
                 @empty
                     <div class="grid gap-3 py-10 text-center"><p class="font-semibold">{{ $totalParticipants === 0 ? 'Belum ada peserta terdaftar' : 'Peserta tidak ditemukan' }}</p><p class="text-sm text-slate-500">{{ $totalParticipants === 0 ? 'Daftarkan peserta untuk mulai mencatat hasil MCU.' : 'Coba ubah kata pencarian atau filter status.' }}</p></div>
                 @endforelse
@@ -92,11 +99,11 @@
             @if($kunjungan->is_closing)<p class="text-sm text-slate-500">Kunjungan telah ditutup. Pengisian dan revisi hasil menjadi hanya baca.</p>
             @else
                 <p class="text-sm text-slate-500">{{ $totalParticipants === 0 ? 'Daftarkan peserta terlebih dahulu sebelum menyelesaikan kunjungan.' : ($remainingParticipants > 0 ? 'Masih ada '.$remainingParticipants.' peserta yang belum final, batal, atau tidak hadir.' : 'Seluruh peserta sudah final, batal, atau tidak hadir. Kunjungan dapat diselesaikan.') }}</p>
-                <p class="text-xs text-slate-500">Penutupan mengunci pengisian dan revisi. Pastikan seluruh hasil telah ditinjau sebelum melanjutkan.</p>
+                <p class="text-xs text-slate-500">Tandai kegiatan selesai tidak merilis laporan. Tutup kunjungan mengunci pengisian/revisi dan merilis semua hasil final ke HRD. Pastikan seluruh hasil telah ditinjau.</p>
                 <form method="POST" action="{{ route('rencana-kunjungan.status', $kunjungan) }}" class="flex flex-wrap gap-3">@csrf
                     @if($kunjungan->status === 'draft')<button name="status" value="ongoing" class="rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white">Mulai kegiatan</button>@endif
                     <button name="status" value="completed" @disabled(!$canComplete) class="rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400">Tandai kegiatan selesai</button>
-                    <button name="status" value="closed" @disabled(!$canComplete) onclick="return confirm('Tutup kunjungan? Pengisian dan revisi tidak bisa dilakukan setelah ditutup.')" class="rounded-xl border border-red-200 px-5 py-3 text-sm font-semibold text-red-700 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400">Tutup kunjungan</button>
+                    <button name="status" value="closed" @disabled(!$canComplete) onclick="return confirm('Tutup kunjungan dan rilis semua hasil final ke HRD? Pengisian dan revisi tidak bisa dilakukan setelah ditutup.')" class="rounded-xl border border-red-200 px-5 py-3 text-sm font-semibold text-red-700 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400">Tutup kunjungan</button>
                 </form>
             @endif
         </section>

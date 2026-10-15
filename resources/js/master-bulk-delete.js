@@ -4,7 +4,9 @@ export function setupMasterBulkDelete(scope) {
     const rows = [...scope.querySelectorAll('[data-bulk-delete-row]')];
     const count = scope.querySelector('[data-bulk-delete-count]');
     const submit = scope.querySelector('[data-bulk-delete-submit]');
+    const confirmModal = scope.querySelector('[data-bulk-delete-confirm]');
     let submitting = false;
+    let confirmed = false;
 
     const update = () => {
         const selected = rows.filter((row) => row.checked).length;
@@ -22,7 +24,17 @@ export function setupMasterBulkDelete(scope) {
     rows.forEach((row) => row.addEventListener('change', update));
     form.addEventListener('submit', (event) => {
         const selected = rows.filter((row) => row.checked).length;
-        if (submitting || !selected || !window.confirm(`Hapus ${selected} data terpilih? Data yang masih digunakan akan dilewati. Penghapusan master tidak mengubah hasil pemeriksaan tersimpan.`)) {
+        if (submitting || !selected) {
+            event.preventDefault();
+            return;
+        }
+        if (confirmModal && !confirmed) {
+            event.preventDefault();
+            confirmModal.querySelector('[data-confirm-count]').textContent = selected;
+            confirmModal.showModal();
+            return;
+        }
+        if (!confirmModal && !window.confirm(`Hapus ${selected} data terpilih? Data yang masih digunakan akan dilewati. Penghapusan master tidak mengubah hasil pemeriksaan tersimpan.`)) {
             event.preventDefault();
             return;
         }
@@ -31,8 +43,14 @@ export function setupMasterBulkDelete(scope) {
         // Keep selected inputs enabled so the browser includes their IDs in the form submission.
         update();
     });
+    confirmModal?.querySelector('[data-confirm-submit]').addEventListener('click', () => {
+        confirmed = true;
+        form.requestSubmit();
+        confirmModal.close();
+    });
     window.addEventListener('pageshow', () => {
         submitting = false;
+        confirmed = false;
         rows.forEach((row) => { row.checked = false; });
         submit.textContent = 'Hapus terpilih';
         update();

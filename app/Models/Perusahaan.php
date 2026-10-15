@@ -24,7 +24,18 @@ class Perusahaan extends Model implements Auditable
         'pic_nama',
         'pic_kontak',
         'logo_path',
+        'dashboard_layout',
     ];
+
+    protected function casts(): array
+    {
+        return ['dashboard_layout' => 'array'];
+    }
+
+    public function users(): HasMany
+    {
+        return $this->hasMany(User::class, 'perusahaan_id');
+    }
 
     /**
      * Relasi ke Rencana Kunjungan

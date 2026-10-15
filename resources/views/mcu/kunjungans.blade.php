@@ -150,6 +150,8 @@
                             @endforeach
                         </div>
                         <p class="text-xs text-slate-500">Tanggal selesai otomatis 14 hari setelah tanggal mulai dan tetap dapat diedit.</p>
+                        <label class="grid gap-2 text-sm font-semibold">Jumlah peserta direncanakan *<input type="number" name="jumlah_peserta_direncanakan" value="{{ old('jumlah_peserta_direncanakan') }}" placeholder="Contoh: 529" min="1" max="1000000" required class="min-h-12 min-w-0 rounded-xl border border-slate-300 px-3">@error('jumlah_peserta_direncanakan')<span class="text-xs text-red-700">{{ $message }}</span>@enderror</label>
+                        <p class="text-xs text-slate-500">Target peserta untuk ringkasan dashboard, bukan batas kuota pendaftaran.</p>
                         <button @disabled($perusahaans->isEmpty())
                             class="rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300">Simpan
                             rencana kunjungan</button>

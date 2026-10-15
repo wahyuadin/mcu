@@ -1,6 +1,9 @@
 @extends('layouts.mcu')
 @section('title', 'Registrasi PKS / Rencana Kunjungan')
 @section('content')
+@if(!$kunjungan->is_closing)
+<form method="POST" action="{{ route('rencana-kunjungan.target', $kunjungan) }}" class="mx-auto mb-6 grid max-w-7xl gap-3 rounded-2xl border border-slate-200 bg-white p-6">@csrf @method('PUT')<label class="grid gap-2 text-sm font-semibold">Jumlah peserta direncanakan<input type="number" name="jumlah_peserta_direncanakan" value="{{ old('jumlah_peserta_direncanakan', $kunjungan->jumlah_peserta_direncanakan) }}" placeholder="Masukkan target peserta" min="1" max="1000000" required class="min-h-12 min-w-0 rounded-xl border border-slate-300 px-3"></label><p class="text-xs text-slate-500">Kuota pendaftaran tidak berubah. Target tidak boleh lebih kecil dari peserta terdaftar.</p><button class="min-h-11 justify-self-start rounded-xl bg-[#00008B] px-5 py-3 text-sm font-semibold text-white">Simpan target</button></form>
+@else<p class="mx-auto mb-6 max-w-7xl text-sm text-slate-500">Jumlah peserta direncanakan: {{ $kunjungan->jumlah_peserta_direncanakan ?? 'Belum diatur' }}</p>@endif
 <div class="mx-auto grid max-w-6xl gap-6">
     <a href="{{ route('rencana-kunjungan.index') }}" class="text-sm font-semibold text-slate-500">← Rencana Kunjungan</a>
     <section class="grid gap-4 rounded-2xl border border-slate-200 bg-white p-6">

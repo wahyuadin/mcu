@@ -106,7 +106,7 @@ class PasienController extends Controller
 
     public function edit(Karyawan $pasien): View
     {
-        abort_if($pasien->rencanaKunjungan->is_closing || $pasien->anamnesa?->status === 'final', 403);
+        abort_if($pasien->rencanaKunjungan->is_closing || $pasien->is_closing || $pasien->anamnesa?->status === 'final', 403);
 
         return view('mcu.pasiens.form', [
             'pasien' => $pasien,
@@ -121,7 +121,7 @@ class PasienController extends Controller
         DB::transaction(function () use ($data, $pasien): void {
             $originalVisit = RencanaKunjungan::whereKey($pasien->rencana_kunjungan_id)->lockForUpdate()->firstOrFail();
             $pasien->refresh();
-            abort_if($originalVisit->is_closing || $pasien->anamnesa?->status === 'final', 403);
+            abort_if($originalVisit->is_closing || $pasien->is_closing || $pasien->anamnesa?->status === 'final', 403);
             $kunjungan = RencanaKunjungan::whereKey($data['rencana_kunjungan_id'])->lockForUpdate()->firstOrFail();
             if ($pasien->rencana_kunjungan_id !== $kunjungan->id && ($kunjungan->is_closing || ($kunjungan->kuota_peserta > 0 && $kunjungan->karyawans()->count() >= $kunjungan->kuota_peserta))) {
                 throw ValidationException::withMessages(['rencana_kunjungan_id' => 'Kunjungan ditutup atau kuota peserta sudah penuh.']);
@@ -151,7 +151,7 @@ class PasienController extends Controller
 
     public function destroy(Karyawan $pasien): RedirectResponse
     {
-        abort_if($pasien->rencanaKunjungan->is_closing, 403);
+        abort_if($pasien->rencanaKunjungan->is_closing || $pasien->is_closing, 403);
         if ($pasien->anamnesa()->exists()) {
             return back()->withErrors(['pasien' => 'Pasien dengan hasil pemeriksaan tidak dapat dihapus.']);
         }

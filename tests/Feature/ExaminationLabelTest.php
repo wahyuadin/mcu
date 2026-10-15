@@ -108,7 +108,7 @@ class ExaminationLabelTest extends TestCase
         [$participant, $category, $subcategory] = $this->participant();
         $url = route('pemeriksaan.labels', [$participant->rencana_kunjungan_id, $participant, 'category' => $category->id, 'subcategories' => [$subcategory->id]]);
         $this->get($url)->assertRedirect(route('login'));
-        $this->actingAs(User::factory()->create(['role' => 'dokter']))->get($url)->assertOk();
+        $this->actingAs(User::factory()->create(['role' => 'petugas']))->get($url)->assertOk();
         $this->actingAs(User::factory()->create(['role' => 'viewer']))->get($url)->assertForbidden();
     }
 

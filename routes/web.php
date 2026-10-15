@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DokterController;
+use App\Http\Controllers\HrdController;
 use App\Http\Controllers\LaporanRiwayatController;
 use App\Http\Controllers\MasterBulkDeleteController;
 use App\Http\Controllers\McuCategoryController;
@@ -12,10 +13,13 @@ use App\Http\Controllers\McuItemOrderController;
 use App\Http\Controllers\McuSubcategoryController;
 use App\Http\Controllers\McuSubcategoryOrderController;
 use App\Http\Controllers\PaketController;
+use App\Http\Controllers\ParticipantReleaseController;
 use App\Http\Controllers\PasienController;
 use App\Http\Controllers\PatientImportController;
 use App\Http\Controllers\PemeriksaanController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicAnamnesaController;
+use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
@@ -33,6 +37,20 @@ Route::middleware('guest')->group(function (): void {
 Route::middleware('auth')->group(function (): void {
     Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
     Route::get('/dashboard', [McuController::class, 'index'])->name('dashboard');
+    Route::get('/users/{user}/avatar', [UserController::class, 'avatar'])->name('users.avatar');
+    Route::patch('/profil-saya', [ProfileController::class, 'update'])->middleware('throttle:30,1')->name('profile.update');
+    Route::put('/profil-saya/password', [ProfileController::class, 'password'])->middleware('throttle:5,1')->name('profile.password');
+    Route::prefix('hrd')->name('hrd.')->middleware('can:view-hrd')->group(function (): void {
+        Route::get('/', [HrdController::class, 'index'])->name('index');
+        Route::get('/data', [HrdController::class, 'data'])->middleware('throttle:60,1')->name('data');
+        Route::get('/participants/{participant}', [HrdController::class, 'participant'])->whereUuid('participant')->middleware('throttle:60,1')->name('participants.show');
+        Route::get('/rekap', [HrdController::class, 'recap'])->middleware('throttle:10,1')->name('recap');
+        Route::put('/layout', [HrdController::class, 'layout'])->middleware('can:manage-mcu')->name('layout');
+        Route::post('/preview', [HrdController::class, 'preview'])->middleware(['can:manage-mcu', 'throttle:30,1'])->name('preview');
+        Route::post('/exports', [HrdController::class, 'export'])->middleware('throttle:5,1')->name('exports.store');
+        Route::get('/exports/{export}', [HrdController::class, 'exportStatus'])->name('exports.status');
+        Route::get('/exports/{export}/download', [HrdController::class, 'download'])->name('exports.download');
+    });
     Route::middleware('can:view-patients')->group(function (): void {
         Route::get('/kunjungan-mcu', [McuController::class, 'kunjunganMcu'])->name('kunjungan-mcu.index');
         Route::get('/perusahaan/{perusahaan}/logo', [McuController::class, 'perusahaanLogo'])->name('perusahaan.logo');
@@ -46,6 +64,10 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/laporan-riwayat/versi/{version}', [LaporanRiwayatController::class, 'showVersion'])->name('pemeriksaan.laporan-riwayat.version');
     });
     Route::middleware('can:manage-mcu')->group(function (): void {
+        Route::put('/rencana-kunjungan/{kunjungan}/target', [McuController::class, 'updatePlanning'])->name('rencana-kunjungan.target');
+        Route::post('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/rilis', [ParticipantReleaseController::class, 'store'])->name('peserta.release');
+        Route::post('/users/hapus-terpilih', [UserController::class, 'bulkDestroy'])->name('users.bulk-destroy');
+        Route::resource('users', UserController::class)->only(['index', 'store', 'update', 'destroy']);
         Route::get('/perusahaan', [McuController::class, 'perusahaans'])->name('perusahaan.index');
         Route::post('/perusahaan', [McuController::class, 'storePerusahaan'])->name('perusahaan.store');
         Route::get('/perusahaan/{perusahaan}/edit', [McuController::class, 'editPerusahaan'])->name('perusahaan.edit');

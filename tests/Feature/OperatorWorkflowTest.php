@@ -216,11 +216,12 @@ class OperatorWorkflowTest extends TestCase
 
     #[TestWith(['admin', true])]
     #[TestWith(['petugas', true])]
-    #[TestWith(['dokter', true])]
+    #[TestWith(['dokter', false])]
     #[TestWith(['unknown', false])]
     public function test_examination_gate_allows_only_the_supported_roles(string $role, bool $allowed): void
     {
         $this->assertSame($allowed, Gate::forUser(User::factory()->make(['role' => $role]))->allows('examine-mcu'));
+        $this->assertSame($allowed, Gate::forUser(User::factory()->make(['role' => $role]))->allows('view-patients'));
     }
 
     public function test_guest_and_unsupported_role_cannot_update_results(): void

@@ -9,6 +9,69 @@
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
 
+.hrd-widget-grid { display: grid; gap: 1.5rem; grid-template-columns: minmax(0, 1fr); }
+.hrd-widget { min-width: 0; border: 1px solid #e2e8f0; border-radius: 1rem; background: white; box-shadow: 0 1px 3px #0f172a08; overflow: hidden; }
+.hrd-widget-heading { display: flex; align-items: start; justify-content: space-between; gap: .75rem; padding: 1.25rem; border-bottom: 1px solid #f1f5f9; }
+.hrd-widget-body { display: grid; align-content: start; gap: 1rem; padding: 1.25rem; min-height: 240px; max-height: 380px; overflow-y: auto; overscroll-behavior: contain; }
+.hrd-widget-title { overflow-wrap: anywhere; font-size: .95rem; font-weight: 700; color: #0f172a; }
+.hrd-widget-subtitle { margin-top: .35rem; font-size: .75rem; color: #64748b; overflow-wrap: anywhere; }
+.hrd-chart-row { display: grid; gap: .4rem; border-radius: .5rem; text-align: left; width: 100%; min-height: 44px; }
+.hrd-chart-label { display: flex; justify-content: space-between; gap: .75rem; font-size: .8rem; color: #475569; }
+.hrd-chart-label span { min-width: 0; overflow-wrap: anywhere; }
+.hrd-chart-track { position: relative; height: .65rem; border-radius: 999px; background: #f1f5f9; overflow: hidden; }
+.hrd-chart-fill { position: absolute; height: 100%; border-radius: inherit; }
+.hrd-chart-ring { width: 180px; height: 180px; margin: auto; border-radius: 50%; position: relative; }
+.hrd-chart-ring[data-donut="true"]::after { content: ''; position: absolute; inset: 22%; border-radius: 50%; background: white; }
+.hrd-chart-table { width: 100%; table-layout: fixed; text-align: left; font-size: .8rem; }
+.hrd-chart-table th, .hrd-chart-table td { padding: .6rem .3rem; border-bottom: 1px solid #f1f5f9; overflow-wrap: anywhere; vertical-align: top; }
+.hrd-chart-table th { color: #64748b; font-weight: 600; }
+.hrd-button { min-width: 44px; min-height: 44px; border-radius: .75rem; border: 1px solid #e2e8f0; padding: .5rem .75rem; font-size: .75rem; color: #475569; touch-action: manipulation; }
+.hrd-chart-row:focus-visible, .hrd-button:focus-visible { outline: 2px solid #00008b; outline-offset: 2px; }
+.hrd-builder-card { display: grid; gap: .75rem; padding: 1rem; border: 1px solid #e2e8f0; border-radius: .75rem; background: #fff; }
+@media (min-width: 768px) { .hrd-widget-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hrd-widget[data-width="2"], .hrd-widget[data-width="3"] { grid-column: span 2; } }
+@media (min-width: 1280px) { .hrd-widget-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .hrd-widget[data-width="3"] { grid-column: span 3; } }
+@media (min-width: 768px) { .hrd-widget[data-height="2"] .hrd-widget-body { min-height: 420px; max-height: 560px; } }
+[data-hrd-dashboard] button { touch-action: manipulation; user-select: none; }
+[data-hrd-dashboard] button:not(:disabled):active { background-color: #dbeafe; color: #00008b; }
+.hrd-resize-handle { cursor: nwse-resize; touch-action: none !important; }
+[data-hrd-dashboard] dialog { overscroll-behavior: contain; }
+
+[data-user-modal] {
+    opacity: 0;
+    transition: opacity 200ms var(--ease-out), display 200ms allow-discrete, overlay 200ms allow-discrete;
+}
+
+[data-account-menu] {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    opacity: 0;
+    transition: opacity 180ms var(--ease-out), display 180ms allow-discrete, overlay 180ms allow-discrete;
+}
+[data-account-menu]:popover-open { opacity: 1; }
+[data-account-chevron] { transition: transform 180ms var(--ease-out); }
+[data-account]:has([data-account-menu]:popover-open) [data-account-chevron] { transform: rotate(180deg); }
+@starting-style {
+    [data-account-menu]:popover-open { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+    [data-account-menu] { transition-duration: 125ms; }
+    [data-account-chevron] { transition: none; }
+}
+[data-user-modal][open] { opacity: 1; }
+[data-user-modal]::backdrop {
+    background: rgb(15 23 42 / 60%);
+    opacity: 0;
+    transition: opacity 200ms var(--ease-out), display 200ms allow-discrete, overlay 200ms allow-discrete;
+}
+[data-user-modal][open]::backdrop { opacity: 1; }
+@starting-style {
+    [data-user-modal][open], [data-user-modal][open]::backdrop { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+    [data-user-modal], [data-user-modal]::backdrop { transition-duration: 125ms; }
+}
+
 [data-exam-subcategory][data-label-selected="true"] {
     outline: 2px solid #00008b;
     outline-offset: 2px;

@@ -7,17 +7,31 @@ class Element {
     addEventListener(name, callback) { this.events[name] = callback; }
 }
 
-function harness(run, { size = 3, accept = true } = {}) {
+function harness(run, { size = 3, accept = true, modal = false } = {}) {
     const previousWindow = globalThis.window;
     const form = new Element();
     const all = new Element();
     const rows = Array.from({ length: size }, () => new Element());
     const count = new Element();
     const submit = new Element();
+    const confirmButton = new Element();
+    const confirmCount = new Element();
+    const confirmModal = modal ? {
+        open: false,
+        querySelector: (selector) => selector === '[data-confirm-submit]' ? confirmButton : confirmCount,
+        showModal() { this.open = true; },
+        close() { this.open = false; },
+    } : undefined;
+    let submitted = false;
+    form.requestSubmit = () => {
+        let prevented = false;
+        form.events.submit({ preventDefault() { prevented = true; } });
+        submitted = !prevented;
+    };
     const confirmations = [];
     const events = {};
     const scope = {
-        querySelector: (selector) => ({ '[data-bulk-delete-form]': form, '[data-bulk-delete-all]': all, '[data-bulk-delete-count]': count, '[data-bulk-delete-submit]': submit })[selector],
+        querySelector: (selector) => ({ '[data-bulk-delete-form]': form, '[data-bulk-delete-all]': all, '[data-bulk-delete-count]': count, '[data-bulk-delete-submit]': submit, '[data-bulk-delete-confirm]': confirmModal })[selector],
         querySelectorAll: () => rows,
     };
     globalThis.window = {
@@ -25,7 +39,7 @@ function harness(run, { size = 3, accept = true } = {}) {
         addEventListener: (event, callback) => { events[event] = callback; },
     };
     setupMasterBulkDelete(scope);
-    try { run({ form, all, rows, count, submit, confirmations, events }); }
+    try { run({ form, all, rows, count, submit, confirmations, events, confirmModal, confirmButton, confirmCount, wasSubmitted: () => submitted }); }
     finally {
         if (previousWindow === undefined) delete globalThis.window;
         else globalThis.window = previousWindow;
@@ -110,4 +124,24 @@ test('confirmed deletion keeps selected IDs enabled in the payload and blocks du
         assert.equal(all.disabled, false);
         assert.equal(submit.textContent, 'Hapus terpilih');
     });
+});
+
+test('modal confirmation waits for approval without using browser confirm', () => {
+    harness(({ rows, form, confirmModal, confirmButton, confirmCount, confirmations, wasSubmitted }) => {
+        rows[0].checked = true;
+        rows[0].events.change();
+        form.requestSubmit();
+        assert.equal(confirmModal.open, true);
+        assert.equal(confirmCount.textContent, 1);
+        assert.equal(wasSubmitted(), false);
+        assert.equal(confirmations.length, 0);
+        confirmModal.close();
+        assert.equal(wasSubmitted(), false);
+        assert.equal(rows[0].checked, true);
+        form.requestSubmit();
+        confirmButton.events.click();
+        assert.equal(wasSubmitted(), true);
+        assert.equal(confirmModal.open, false);
+        assert.equal(rows[0].disabled, false);
+    }, { modal: true });
 });

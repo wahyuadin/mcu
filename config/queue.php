@@ -30,6 +30,14 @@ return [
     */
 
     'connections' => [
+        'mcu-reports' => [
+            'driver' => 'database',
+            'connection' => env('DB_QUEUE_CONNECTION'),
+            'table' => env('DB_QUEUE_TABLE', 'jobs'),
+            'queue' => 'mcu-reports',
+            'retry_after' => 180,
+            'after_commit' => true,
+        ],
 
         'sync' => [
             'driver' => 'sync',

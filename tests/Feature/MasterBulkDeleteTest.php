@@ -84,7 +84,7 @@ class MasterBulkDeleteTest extends TestCase
         $schema = [['id' => $category->id, 'name' => $category->name, 'order' => 0, 'items' => $items->map(fn (McuItem $item): array => $item->definition())->all()]];
         $package = Paket::factory()->master()->create(['dynamic_schema' => $schema]);
 
-        $this->post(route('mcu-item.bulk-destroy'), ['ids' => $items->modelKeys(), 'category' => $category->id])->assertRedirect(route('mcu-item.index', ['category' => $category->id]))->assertSessionHas('bulkDeleteResults', fn (array $results): bool => count($results) === 2 && $results[0]['deleted'] && $results[1]['deleted']);
+        $this->post(route('mcu-item.bulk-destroy'), ['ids' => $items->modelKeys(), 'category' => $category->id, 'q' => 'Hemoglobin'])->assertRedirect(route('mcu-item.index', ['q' => 'Hemoglobin', 'category' => $category->id]))->assertSessionHas('bulkDeleteResults', fn (array $results): bool => count($results) === 2 && $results[0]['deleted'] && $results[1]['deleted']);
 
         foreach ($items as $item) {
             $this->assertDatabaseMissing('mcu_items', ['id' => $item->id]);

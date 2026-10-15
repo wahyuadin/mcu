@@ -25,7 +25,7 @@ class MasterBulkDeleteController extends Controller
 
     public function items(Request $request): RedirectResponse
     {
-        return $this->deleteSelected($request, McuItem::class, 'mcu-item.index', ['category', 'page']);
+        return $this->deleteSelected($request, McuItem::class, 'mcu-item.index', ['q', 'category', 'page']);
     }
 
     public function subcategories(Request $request): RedirectResponse

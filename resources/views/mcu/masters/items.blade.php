@@ -4,8 +4,13 @@
 <div class="mx-auto grid max-w-6xl gap-6">
     <div class="flex flex-wrap items-center justify-between gap-4"><div><h2 class="text-2xl font-bold">Item dan mapping laporan</h2><p class="mt-2 text-sm text-slate-500">Susun pertanyaan seperti form. Pilih item tersebut saat membuat paket.</p></div><div class="flex flex-wrap gap-3"><button type="button" data-item-order-open data-category-select="category" aria-haspopup="dialog" aria-controls="item-order-modal" class="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-[#00008B]">Atur urutan</button><a href="{{ route('mcu-item.create', ['category' => request('category')]) }}" class="rounded-xl bg-[#00008B] px-5 py-3 text-sm font-bold text-white">+ Tambah item</a></div></div>
     <section data-bulk-delete class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <form method="GET" class="flex flex-wrap items-end gap-3 border-b border-slate-100 p-6"><label class="grid min-w-0 flex-1 gap-2 text-sm font-semibold sm:max-w-sm">Kategori<select name="category" class="min-h-12 min-w-0 rounded-xl border border-slate-300 bg-white px-3"><option value="">Semua kategori</option>@foreach($categories as $category)<option value="{{ $category->id }}" @selected(request('category') === $category->id)>{{ $category->name }}</option>@endforeach</select></label><button class="rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold">Tampilkan</button></form>
-        @include('mcu.master-bulk-delete', ['bulkRoute' => 'mcu-item.bulk-destroy', 'bulkFilters' => ['category', 'page']])
+        <form method="GET" action="{{ route('mcu-item.index') }}" class="flex flex-wrap items-end gap-3 border-b border-slate-100 p-6">
+            <label class="grid w-full min-w-0 gap-2 text-sm font-semibold sm:w-auto sm:flex-1">Cari item<input type="search" name="q" value="{{ $search }}" maxlength="255" placeholder="Cari nama item…" class="min-h-12 min-w-0 rounded-xl border border-slate-300 bg-white px-3"></label>
+            <label class="grid w-full min-w-0 gap-2 text-sm font-semibold sm:w-auto sm:flex-1 sm:max-w-sm">Kategori<select name="category" class="min-h-12 min-w-0 rounded-xl border border-slate-300 bg-white px-3"><option value="">Semua kategori</option>@foreach($categories as $category)<option value="{{ $category->id }}" @selected(request('category') === $category->id)>{{ $category->name }}</option>@endforeach</select></label>
+            <button type="submit" class="rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold">Cari</button>
+            <a href="{{ route('mcu-item.index') }}" class="rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold">Reset</a>
+        </form>
+        @include('mcu.master-bulk-delete', ['bulkRoute' => 'mcu-item.bulk-destroy', 'bulkFilters' => ['q', 'category', 'page']])
         <div class="overflow-x-auto">
             <table aria-label="Daftar item MCU" class="w-full min-w-[1100px] text-left text-sm">
                 <thead class="border-b border-slate-100 bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr>@include('mcu.master-select-all')<th scope="col" class="px-5 py-4">Item</th><th scope="col" class="px-5 py-4">Kategori</th><th scope="col" class="px-5 py-4">Jenis input</th><th scope="col" class="px-5 py-4">Mapping laporan</th><th scope="col" class="px-5 py-4">Pengisian</th><th scope="col" class="px-5 py-4">Status</th><th scope="col" class="px-5 py-4 text-right">Aksi</th></tr></thead>
@@ -23,7 +28,7 @@
                             <td class="px-5 py-4 align-top"><span class="whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold {{ $item->is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500' }}">{{ $item->is_active ? 'Aktif' : 'Nonaktif' }}</span></td>
                             <td class="px-5 py-4 text-right align-top">@include('mcu.master-actions', ['compact' => true, 'name' => $item->label, 'editUrl' => route('mcu-item.edit', $item), 'deleteUrl' => route('mcu-item.destroy', $item)])</td>
                         </tr>
-                    @empty<tr><td colspan="8" class="px-6 py-12 text-center text-slate-500">Belum ada item di kategori ini.</td></tr>@endforelse
+                    @empty<tr><td colspan="8" class="px-6 py-12 text-center text-slate-500">{{ $search !== '' ? 'Tidak ada item yang cocok dengan pencarian.' : 'Belum ada item di kategori ini.' }}</td></tr>@endforelse
                 </tbody>
             </table>
         </div>

@@ -180,7 +180,7 @@ class PublicAnamnesaController extends Controller
     private function editable(Karyawan $participant): void
     {
         abort_unless($participant->rencanaKunjungan->pakets()->whereKey($participant->paket_id)->exists(), 403, 'Paket belum tersedia. Hubungi petugas.');
-        abort_if(in_array($participant->status_pemeriksaan, ['batal', 'tidak_hadir', 'selesai'], true) || $participant->anamnesa?->status === 'final', 403, 'Formulir tidak tersedia. Hubungi petugas.');
+        abort_if($participant->is_closing || in_array($participant->status_pemeriksaan, ['batal', 'tidak_hadir', 'selesai'], true) || $participant->anamnesa?->status === 'final', 403, 'Formulir tidak tersedia. Hubungi petugas.');
     }
 
     private function sessionKey(string $token): string
