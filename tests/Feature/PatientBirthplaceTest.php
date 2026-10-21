@@ -18,7 +18,7 @@ class PatientBirthplaceTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin']));
         $visit = RencanaKunjungan::factory()->create(['kuota_peserta' => 0]);
         $package = Paket::factory()->master()->create();
-        $data = ['nama_karyawan' => 'Wahyu Adi Nugroho', 'jenis_kelamin' => 'L', 'tempat_lahir' => 'Bandung', 'tanggal_lahir' => '2005-08-24', 'rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id];
+        $data = ['nip' => 'EMP-001', 'bagian' => 'Operasional', 'nama_karyawan' => 'Wahyu Adi Nugroho', 'jenis_kelamin' => 'L', 'tempat_lahir' => 'Bandung', 'tanggal_lahir' => '2005-08-24', 'rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id];
 
         $this->get(route('pasien.create'))->assertOk()->assertSee('name="tempat_lahir"', false);
         $this->post(route('pasien.store'), $data)->assertRedirect()->assertSessionHasNoErrors();
@@ -31,7 +31,7 @@ class PatientBirthplaceTest extends TestCase
         $this->assertSame('Cimahi', $episode->fresh()->pasien->tempat_lahir);
         $otherVisit = RencanaKunjungan::factory()->create(['kuota_peserta' => 0]);
         $this->get(route('pasien.create', ['pasien_id' => $episode->pasien_id]))->assertOk()->assertSee('value="Cimahi"', false);
-        $this->post(route('pasien.store'), ['pasien_id' => $episode->pasien_id, 'tempat_lahir' => 'Override ditolak', 'rencana_kunjungan_id' => $otherVisit->id, 'paket_id' => $package->id])->assertRedirect()->assertSessionHasNoErrors();
+        $this->post(route('pasien.store'), ['nip' => 'EMP-002', 'bagian' => 'Operasional', 'pasien_id' => $episode->pasien_id, 'tempat_lahir' => 'Override ditolak', 'rencana_kunjungan_id' => $otherVisit->id, 'paket_id' => $package->id])->assertRedirect()->assertSessionHasNoErrors();
         $this->assertDatabaseHas('karyawans', ['pasien_id' => $episode->pasien_id, 'rencana_kunjungan_id' => $otherVisit->id, 'tempat_lahir' => 'Cimahi']);
         $this->assertDatabaseCount('pasiens', 1);
     }
@@ -40,7 +40,7 @@ class PatientBirthplaceTest extends TestCase
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
         $episode = Karyawan::factory()->create(['tempat_lahir' => '<script>Bandung</script>']);
-        $data = ['nama_karyawan' => $episode->nama_karyawan, 'jenis_kelamin' => $episode->jenis_kelamin, 'rencana_kunjungan_id' => $episode->rencana_kunjungan_id, 'paket_id' => $episode->paket_id];
+        $data = ['nip' => 'EMP-001', 'tanggal_lahir' => '1990-01-01', 'bagian' => 'Operasional', 'nama_karyawan' => $episode->nama_karyawan, 'jenis_kelamin' => $episode->jenis_kelamin, 'rencana_kunjungan_id' => $episode->rencana_kunjungan_id, 'paket_id' => $episode->paket_id];
         $this->get(route('pasien.show', $episode))->assertOk()->assertSee('&lt;script&gt;Bandung&lt;/script&gt;', false)->assertDontSee('<script>Bandung</script>', false);
         $this->put(route('pasien.update', $episode), [...$data, 'tempat_lahir' => str_repeat('x', 256)])->assertSessionHasErrors('tempat_lahir');
         $this->assertSame('<script>Bandung</script>', $episode->fresh()->tempat_lahir);

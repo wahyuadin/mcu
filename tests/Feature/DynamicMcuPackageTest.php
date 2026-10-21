@@ -259,7 +259,7 @@ class DynamicMcuPackageTest extends TestCase
         [$first, $item] = $this->dynamicParticipant();
         $this->put(route('pemeriksaan.update', [$first->rencanaKunjungan, $first]), ['section' => 'dinamis', 'status' => 'selesai', 'lock_version' => 0, 'dynamic_answers' => [$item->id => 'TIDAK']])->assertSessionHasNoErrors();
         $firstExam = $first->fresh()->anamnesa;
-        $this->post(route('pasien.store'), ['rencana_kunjungan_id' => $first->rencana_kunjungan_id, 'paket_id' => $first->paket_id, 'nama_karyawan' => 'Peserta kedua', 'jenis_kelamin' => 'P'])->assertSessionHasNoErrors();
+        $this->post(route('pasien.store'), ['nip' => 'EMP-001', 'tanggal_lahir' => '1990-01-01', 'bagian' => 'Operasional', 'rencana_kunjungan_id' => $first->rencana_kunjungan_id, 'paket_id' => $first->paket_id, 'nama_karyawan' => 'Peserta kedua', 'jenis_kelamin' => 'P'])->assertSessionHasNoErrors();
         $second = Karyawan::where('nama_karyawan', 'Peserta kedua')->firstOrFail();
         $this->assertSame($first->paket_id, $second->paket_id);
         $this->assertNull($second->anamnesa);

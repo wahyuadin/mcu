@@ -41,7 +41,7 @@ class RencanaKunjunganUiTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin']));
         $visit = RencanaKunjungan::factory()->create(['kuota_peserta' => 0]);
         $package = Paket::factory()->create(['rencana_kunjungan_id' => $visit->id]);
-        $payload = ['rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id, 'nama_karyawan' => 'Peserta tanpa kuota', 'jenis_kelamin' => 'L'];
+        $payload = ['nip' => 'EMP-001', 'tanggal_lahir' => '1990-01-01', 'bagian' => 'Operasional', 'rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id, 'nama_karyawan' => 'Peserta tanpa kuota', 'jenis_kelamin' => 'L'];
         $this->post(route('peserta.store', $visit), $payload)->assertSessionHasNoErrors();
         $this->post(route('pasien.store'), $payload)->assertSessionHasNoErrors();
         $participant = Karyawan::factory()->create();
@@ -56,7 +56,7 @@ class RencanaKunjunganUiTest extends TestCase
         $visit = RencanaKunjungan::factory()->create(['kuota_peserta' => 1]);
         $package = Paket::factory()->create(['rencana_kunjungan_id' => $visit->id]);
         Karyawan::factory()->create(['rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id]);
-        $payload = ['rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id, 'nama_karyawan' => 'Peserta tambahan', 'jenis_kelamin' => 'L'];
+        $payload = ['nip' => 'EMP-001', 'tanggal_lahir' => '1990-01-01', 'bagian' => 'Operasional', 'rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id, 'nama_karyawan' => 'Peserta tambahan', 'jenis_kelamin' => 'L'];
         $this->post(route('peserta.store', $visit), $payload)->assertSessionHasErrors('nama_karyawan');
         $this->post(route('pasien.store'), $payload)->assertSessionHasErrors('rencana_kunjungan_id');
         $this->assertSame(1, $visit->karyawans()->count());

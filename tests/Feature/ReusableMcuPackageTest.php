@@ -48,7 +48,7 @@ class ReusableMcuPackageTest extends TestCase
         foreach ($visits as $visit) {
             $this->post(route('rencana-kunjungan.paket.bind', $visit), ['paket_id' => $package->id])->assertSessionHasNoErrors();
             $this->post(route('rencana-kunjungan.paket.bind', $visit), ['paket_id' => $package->id])->assertSessionHasNoErrors();
-            $this->post(route('pasien.store'), ['rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id, 'nama_karyawan' => 'Peserta '.$visit->nomor_kunjungan, 'jenis_kelamin' => 'L'])->assertSessionHasNoErrors();
+            $this->post(route('pasien.store'), ['nip' => 'EMP-001', 'tanggal_lahir' => '1990-01-01', 'bagian' => 'Operasional', 'rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id, 'nama_karyawan' => 'Peserta '.$visit->nomor_kunjungan, 'jenis_kelamin' => 'L'])->assertSessionHasNoErrors();
             $this->get(route('kunjungan-mcu.show', $visit))->assertOk()
                 ->assertViewHas('kunjungan', fn ($data): bool => $data->pakets->first()->karyawans_count === 1);
         }
@@ -57,7 +57,7 @@ class ReusableMcuPackageTest extends TestCase
         $this->assertSame(2, $package->karyawans()->count());
         $this->assertNotEquals($visits[0]->perusahaan_id, $visits[1]->perusahaan_id);
         $other = RencanaKunjungan::factory()->create();
-        $this->post(route('peserta.store', $other), ['paket_id' => $package->id, 'nama_karyawan' => 'Paket otomatis terikat', 'jenis_kelamin' => 'L'])->assertSessionHasNoErrors();
+        $this->post(route('peserta.store', $other), ['nip' => 'EMP-001', 'tanggal_lahir' => '1990-01-01', 'bagian' => 'Operasional', 'paket_id' => $package->id, 'nama_karyawan' => 'Paket otomatis terikat', 'jenis_kelamin' => 'L'])->assertSessionHasNoErrors();
         $this->assertDatabaseHas('paket_rencana_kunjungan', ['paket_id' => $package->id, 'rencana_kunjungan_id' => $other->id]);
         $this->get(route('pasien.create', ['rencana_kunjungan_id' => $visits[1]->id]))->assertOk()->assertSee('Semua paket master dapat dipakai ulang.');
         foreach ($package->karyawans as $participant) {
@@ -96,6 +96,7 @@ class ReusableMcuPackageTest extends TestCase
             $this->post(route('pasien.store'), [
                 'rencana_kunjungan_id' => $visit->id, 'paket_id' => $selected->id,
                 'nama_karyawan' => $name, 'jenis_kelamin' => 'P',
+                'nip' => 'EMP-001', 'tanggal_lahir' => '1990-01-01', 'bagian' => 'Operasional',
             ])->assertSessionHasNoErrors();
         }
         $this->assertDatabaseCount('pakets', 2);
@@ -106,6 +107,7 @@ class ReusableMcuPackageTest extends TestCase
         $this->post(route('pasien.store'), [
             'rencana_kunjungan_id' => $otherVisit->id, 'paket_id' => $selected->id,
             'nama_karyawan' => 'Peserta perusahaan lain', 'jenis_kelamin' => 'L',
+            'nip' => 'EMP-001', 'tanggal_lahir' => '1990-01-01', 'bagian' => 'Operasional',
         ])->assertSessionHasNoErrors();
         $this->assertDatabaseCount('pakets', 2);
         $this->assertDatabaseCount('paket_rencana_kunjungan', 2);
@@ -118,7 +120,7 @@ class ReusableMcuPackageTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin']));
         $package = Paket::factory()->master()->create(['nama_paket' => 'Master tidak tersedia']);
         $visit = RencanaKunjungan::factory()->create(['is_closing' => true]);
-        $payload = ['rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id, 'nama_karyawan' => 'Tidak tersimpan', 'jenis_kelamin' => 'L'];
+        $payload = ['nip' => 'EMP-001', 'tanggal_lahir' => '1990-01-01', 'bagian' => 'Operasional', 'rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id, 'nama_karyawan' => 'Tidak tersimpan', 'jenis_kelamin' => 'L'];
         $this->post(route('pasien.store'), $payload)->assertSessionHasErrors('rencana_kunjungan_id');
         $this->post(route('peserta.store', $visit), $payload)->assertForbidden();
         $this->assertDatabaseCount('paket_rencana_kunjungan', 0);
@@ -136,7 +138,7 @@ class ReusableMcuPackageTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin']));
         $participant = Karyawan::factory()->create();
         $package = Paket::factory()->master()->create();
-        $payload = ['rencana_kunjungan_id' => $participant->rencana_kunjungan_id, 'paket_id' => $package->id, 'nama_karyawan' => $participant->nama_karyawan, 'jenis_kelamin' => 'L'];
+        $payload = ['nip' => 'EMP-001', 'tanggal_lahir' => '1990-01-01', 'bagian' => 'Operasional', 'rencana_kunjungan_id' => $participant->rencana_kunjungan_id, 'paket_id' => $package->id, 'nama_karyawan' => $participant->nama_karyawan, 'jenis_kelamin' => 'L'];
         $this->put(route('pasien.update', $participant), $payload)->assertSessionHasNoErrors();
         $this->assertSame($package->id, $participant->fresh()->paket_id);
         $this->assertDatabaseHas('paket_rencana_kunjungan', ['paket_id' => $package->id, 'rencana_kunjungan_id' => $participant->rencana_kunjungan_id]);

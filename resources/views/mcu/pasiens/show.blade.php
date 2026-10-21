@@ -58,7 +58,7 @@
                     @foreach($episodes as $episode)
                         <div class="grid items-center gap-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
                             <div class="min-w-0"><strong class="block">{{ $episode->tanggal_mcu?->translatedFormat('d M Y') ?? 'Tanggal MCU belum diisi' }}</strong><p class="mt-2 break-all text-sm text-slate-500">{{ $episode->nomor_mcu }}</p><p class="mt-1 text-xs text-slate-500">{{ $episode->perusahaan->nama_perusahaan }} · {{ $episode->bagian ?? 'Departemen belum dicatat' }} · {{ $episode->paket->nama_paket }}</p></div>
-                            <span class="justify-self-start rounded-full px-4 py-2 text-center text-xs font-bold {{ $episode->status_pemeriksaan === 'selesai' ? 'bg-emerald-50 text-emerald-700' : (in_array($episode->status_pemeriksaan, ['batal', 'tidak_hadir'], true) ? 'bg-slate-100 text-slate-500' : 'bg-blue-50 text-blue-800') }}">{{ $statusLabels[$episode->status_pemeriksaan] ?? $episode->status_pemeriksaan }}</span>
+                            <div class="grid gap-2"><span class="text-xs font-semibold text-slate-600">{{ $episode->hasStoredPhoto() ? 'Present' : 'Not Present' }}</span><span class="text-xs text-slate-500">{{ $statusLabels[$episode->status_pemeriksaan] ?? $episode->status_pemeriksaan }}</span></div>
                             @can('examine-mcu')<a href="{{ route('pemeriksaan.edit', [$episode->rencanaKunjungan, $episode]) }}" class="rounded-xl border border-slate-300 px-5 py-3 text-center text-sm font-bold hover:border-emerald-700 hover:bg-emerald-50">Lihat kunjungan</a>@else<a href="{{ route('kunjungan-mcu.show', $episode->rencanaKunjungan) }}" class="rounded-xl border border-slate-300 px-5 py-3 text-center text-sm font-bold">Lihat kunjungan</a>@endcan
                         </div>
                     @endforeach
@@ -67,20 +67,6 @@
         </div>
     </div>
 
-    @can('manage-mcu')
-        @if(!$pasien->rencanaKunjungan->is_closing && $pasien->anamnesa?->status !== 'final')
-            <details class="rounded-2xl border border-slate-200 bg-white p-6"><summary class="cursor-pointer font-semibold">Kelola pendaftaran episode {{ $pasien->nomor_mcu }}</summary>
-                <div class="mt-5 flex flex-wrap gap-3"><a href="{{ route('pasien.edit', $pasien) }}" class="rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold">Ubah identitas episode</a>
-                    @if(!$pasien->anamnesa)<form method="POST" action="{{ route('pasien.destroy', $pasien) }}" onsubmit="return confirm('Hapus pendaftaran episode ini?')">@csrf @method('DELETE')<button class="rounded-xl border border-red-200 px-4 py-3 text-sm text-red-700">Hapus pendaftaran</button></form>@endif
-                </div>
-                <form method="POST" action="{{ route('peserta.status', [$pasien->rencanaKunjungan, $pasien]) }}" class="mt-5 grid gap-4">@csrf
-                    @include('mcu.field', ['field' => 'status', 'label' => 'Batal / tidak hadir / aktifkan kembali peserta', 'type' => 'select', 'value' => null, 'options' => ['batal' => 'Batal', 'tidak_hadir' => 'Tidak hadir', 'belum' => 'Aktifkan kembali']])
-                    @include('mcu.field', ['field' => 'reason', 'label' => 'Alasan perubahan status (wajib)', 'type' => 'textarea', 'value' => null])
-                    <button class="justify-self-start rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold">Simpan status peserta</button>
-                </form>
-            </details>
-        @endif
-    @endcan
     @if($pasien->alasan_status)<p class="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">Alasan status terakhir: {{ $pasien->alasan_status }}</p>@endif
 </div>
 @endsection

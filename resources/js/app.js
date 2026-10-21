@@ -2,6 +2,7 @@ import './patient-photo';
 import './checkpoint-print';
 import './planning-dates';
 import './package-selection';
+import './visit-participants';
 import './package-builder';
 import './master-item';
 import './item-order';
@@ -15,28 +16,4 @@ import './user-management';
 import './account-menu';
 import './hrd-dashboard';
 import './dashboard';
-
-const examForm = document.querySelector('[data-exam-form]');
-
-if (examForm) {
-    let dirty = false;
-    examForm.addEventListener('input', () => {
-        dirty = true;
-        const status = examForm.querySelector('[data-save-status]');
-        if (status) status.textContent = 'Ada perubahan yang belum disimpan';
-        const height = Number(examForm.elements.namedItem('tinggi_badan')?.value);
-        const weight = Number(examForm.elements.namedItem('berat_badan')?.value);
-        const bmi = examForm.querySelector('[data-bmi]');
-        if (bmi && height > 0 && weight > 0) {
-            bmi.textContent = `${(weight / ((height / 100) ** 2)).toFixed(2)} · kategori dihitung saat disimpan`;
-        } else if (bmi) {
-            bmi.textContent = '— · isi tinggi dan berat badan';
-        }
-    });
-    examForm.addEventListener('submit', () => { dirty = false; });
-    window.addEventListener('beforeunload', (event) => {
-        if (!dirty) return;
-        event.preventDefault();
-        event.returnValue = '';
-    });
-}
+import './examination-navigation';

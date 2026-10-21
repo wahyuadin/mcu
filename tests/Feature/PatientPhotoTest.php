@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use PHPUnit\Framework\Attributes\TestWith;
 use Tests\TestCase;
 
 class PatientPhotoTest extends TestCase
@@ -165,11 +166,20 @@ class PatientPhotoTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin']));
         $participant = Karyawan::factory()->withPhoto()->create();
         $this->get(route('pemeriksaan.edit', [$participant->rencanaKunjungan, $participant, 'tab' => 'identitas']))
-            ->assertOk()->assertSee('Edit identitas pasien')->assertSee(route('pasien.edit', $participant))
+            ->assertOk()->assertSee('Edit identitas pasien')->assertDontSee(route('pasien.edit', $participant))
+            ->assertSee('data-patient-identity', false)->assertSee(route('pasien.update', $participant))
+            ->assertSee('placeholder="Masukkan nama lengkap sesuai identitas"', false)
+            ->assertSee('placeholder="Masukkan 16 digit NIK"', false)
+            ->assertSee('placeholder="Contoh: EMP-876"', false)
+            ->assertSee('placeholder="Contoh: Jakarta"', false)
+            ->assertSee('placeholder="Contoh: Operasional"', false)
+            ->assertSee('placeholder="Contoh: Staf administrasi"', false)
+            ->assertSee('placeholder="Contoh: 081234567890"', false)->assertSee('Pilih jenis kelamin')
+            ->assertDontSee('name="tanggal_mcu"', false)
             ->assertSee('data-photo-modal-open', false)->assertSee('<dialog id="patient-photo-modal"', false)
             ->assertSee('aria-labelledby="patient-photo-modal-title"', false)->assertSee('Simpan foto baru')
             ->assertSee('Buka kamera realtime')->assertSee('name="foto_pasien"', false)
-            ->assertDontSee('Perbaiki identitas pasien')
+            ->assertDontSee('Perbaiki identitas pasien')->assertDontSee('Ganti foto pasien')
             ->assertDontSee(route('pemeriksaan.edit', [$participant->rencanaKunjungan, $participant, 'tab' => 'foto']));
     }
 
@@ -195,5 +205,104 @@ class PatientPhotoTest extends TestCase
             ->assertOk()->assertSee('Foto peserta '.$participant->nama_karyawan)->assertSee('QR menuju pemeriksaan pasien')
             ->assertDontSee('Edit identitas pasien')->assertDontSee('data-photo-modal-open', false)
             ->assertDontSee('<dialog', false);
+    }
+
+    public function test_identity_modal_updates_identity_and_returns_to_the_identity_tab_without_changing_the_photo(): void
+    {
+        $participant = Karyawan::factory()->withPhoto()->create();
+        $photo = $participant->foto;
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+
+        $this->put(route('pasien.update', $participant), ['nip' => 'EMP-001', 'tanggal_lahir' => '1990-01-01', 'bagian' => 'Operasional', 'identity_modal' => '1', 'nama_karyawan' => 'Nama Diperbarui', 'jenis_kelamin' => 'P',
+            'rencana_kunjungan_id' => $participant->rencana_kunjungan_id, 'paket_id' => $participant->paket_id])->assertRedirect(route('pemeriksaan.edit', [$participant->rencana_kunjungan_id, $participant, 'tab' => 'identitas']));
+
+        $this->assertSame('Nama Diperbarui', $participant->fresh()->nama_karyawan);
+        $this->assertSame('Nama Diperbarui', $participant->pasien->fresh()->nama);
+        $this->assertSame($photo, $participant->fresh()->foto);
+    }
+
+    public function test_identity_validation_reopens_the_combined_modal_with_the_entered_values(): void
+    {
+        $participant = Karyawan::factory()->withPhoto()->create();
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+        $url = route('pemeriksaan.edit', [$participant->rencana_kunjungan_id, $participant, 'tab' => 'identitas']);
+
+        $this->followingRedirects()->from($url)->put(route('pasien.update', $participant), ['identity_modal' => '1', 'nama_karyawan' => 'Draft Nama', 'nik' => 'invalid', 'jenis_kelamin' => 'P',
+            'rencana_kunjungan_id' => $participant->rencana_kunjungan_id, 'paket_id' => $participant->paket_id])->assertOk()
+            ->assertSee('data-photo-modal-errors', false)->assertSee('value="Draft Nama"', false)->assertSee('value="invalid"', false);
+
+        $this->assertNotSame('Draft Nama', $participant->fresh()->nama_karyawan);
+    }
+
+    public function test_identity_modal_cannot_edit_a_final_examination(): void
+    {
+        $participant = Karyawan::factory()->withPhoto()->create();
+        $participant->anamnesa()->create(['rencana_kunjungan_id' => $participant->rencana_kunjungan_id, 'status' => 'final']);
+        $name = $participant->nama_karyawan;
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+
+        $this->put(route('pasien.update', $participant), ['nip' => 'EMP-001', 'tanggal_lahir' => '1990-01-01', 'bagian' => 'Operasional', 'identity_modal' => '1', 'nama_karyawan' => 'Tidak boleh', 'jenis_kelamin' => 'P',
+            'rencana_kunjungan_id' => $participant->rencana_kunjungan_id, 'paket_id' => $participant->paket_id])->assertForbidden();
+
+        $this->assertSame($name, $participant->fresh()->nama_karyawan);
+    }
+
+    #[TestWith([null])]
+    #[TestWith(['2026-10-01'])]
+    public function test_first_episode_photo_records_the_actual_mcu_date(?string $previousDate): void
+    {
+        $this->travelTo(now()->setDate(2026, 10, 22)->setTime(10, 0));
+        $participant = Karyawan::factory()->create(['tanggal_mcu' => $previousDate]);
+        $this->actingAs(User::factory()->create(['role' => 'petugas']));
+
+        $this->post(route('pemeriksaan.photo', [$participant->rencanaKunjungan, $participant]), ['foto_pasien' => UploadedFile::fake()->image('foto.jpg')])->assertSessionHasNoErrors();
+
+        $this->assertSame('2026-10-22', $participant->fresh()->tanggal_mcu->toDateString());
+    }
+
+    #[TestWith(['2026-10-01', '2026-10-01'])]
+    #[TestWith([null, '2026-10-22'])]
+    public function test_replacing_a_photo_preserves_the_mcu_date_unless_it_is_missing(?string $previousDate, string $expectedDate): void
+    {
+        $this->travelTo(now()->setDate(2026, 10, 22)->setTime(10, 0));
+        $participant = Karyawan::factory()->withPhoto()->create(['tanggal_mcu' => $previousDate]);
+        $this->actingAs(User::factory()->create(['role' => 'petugas']));
+
+        $this->post(route('pemeriksaan.photo', [$participant->rencanaKunjungan, $participant]), ['foto_pasien' => UploadedFile::fake()->image('replacement.jpg')])->assertSessionHasNoErrors();
+
+        $this->assertSame($expectedDate, $participant->fresh()->tanggal_mcu->toDateString());
+    }
+
+    public function test_inherited_photo_does_not_prevent_recording_the_new_episode_date(): void
+    {
+        $this->travelTo(now()->setDate(2026, 10, 22)->setTime(10, 0));
+        $previous = Karyawan::factory()->withPhoto()->create();
+        $participant = Karyawan::factory()->create(['pasien_id' => $previous->pasien_id, 'foto' => $previous->foto, 'tanggal_mcu' => '2026-10-01']);
+        $this->actingAs(User::factory()->create(['role' => 'petugas']));
+
+        $this->post(route('pemeriksaan.photo', [$participant->rencanaKunjungan, $participant]), ['foto_pasien' => UploadedFile::fake()->image('new-episode.jpg')])->assertSessionHasNoErrors();
+
+        $this->assertSame('2026-10-22', $participant->fresh()->tanggal_mcu->toDateString());
+    }
+
+    public function test_failed_photo_upload_does_not_record_a_mcu_date(): void
+    {
+        $participant = Karyawan::factory()->create(['tanggal_mcu' => null]);
+        $this->actingAs(User::factory()->create(['role' => 'petugas']));
+
+        $this->post(route('pemeriksaan.photo', [$participant->rencanaKunjungan, $participant]), [])->assertSessionHasErrors('foto_pasien');
+
+        $this->assertNull($participant->fresh()->tanggal_mcu);
+    }
+
+    public function test_identity_modal_cannot_override_the_automatically_recorded_mcu_date(): void
+    {
+        $participant = Karyawan::factory()->withPhoto()->create(['tanggal_mcu' => '2026-10-01']);
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+
+        $this->put(route('pasien.update', $participant), ['nip' => 'EMP-001', 'tanggal_lahir' => '1990-01-01', 'bagian' => 'Operasional', 'identity_modal' => '1', 'nama_karyawan' => $participant->nama_karyawan, 'jenis_kelamin' => $participant->jenis_kelamin,
+            'rencana_kunjungan_id' => $participant->rencana_kunjungan_id, 'paket_id' => $participant->paket_id, 'tanggal_mcu' => '2026-10-30'])->assertSessionHasNoErrors();
+
+        $this->assertSame('2026-10-01', $participant->fresh()->tanggal_mcu->toDateString());
     }
 }

@@ -45,8 +45,8 @@ class McuWorkflowTest extends TestCase
         $full = Paket::where('nama_paket', 'Paket 2 XYZ Full')->firstOrFail();
         $this->assertFalse($custom->isItemActive('tbc'));
         $this->assertTrue($full->isItemActive('tbc'));
-        $this->post(route('peserta.store', $visit), ['paket_id' => $custom->id, 'nama_karyawan' => 'Andi', 'jenis_kelamin' => 'L'])->assertRedirect();
-        $this->post(route('peserta.store', $visit), ['paket_id' => $full->id, 'nama_karyawan' => 'Budi', 'jenis_kelamin' => 'L'])->assertRedirect();
+        $this->post(route('peserta.store', $visit), ['nip' => 'EMP-001', 'tanggal_lahir' => '1990-01-01', 'bagian' => 'Operasional', 'paket_id' => $custom->id, 'nama_karyawan' => 'Andi', 'jenis_kelamin' => 'L'])->assertRedirect();
+        $this->post(route('peserta.store', $visit), ['nip' => 'EMP-002', 'tanggal_lahir' => '1990-01-01', 'bagian' => 'Operasional', 'paket_id' => $full->id, 'nama_karyawan' => 'Budi', 'jenis_kelamin' => 'L'])->assertRedirect();
         $this->assertSame(2, $visit->karyawans()->count());
         $this->get(route('dashboard'))->assertOk();
         $this->get(route('perusahaan.index'))->assertOk();
@@ -90,11 +90,11 @@ class McuWorkflowTest extends TestCase
         $this->assertFalse($package->fresh()->isItemActive('tbc'));
 
         $this->get(route('pasien.create'))->assertOk();
-        $this->post(route('pasien.store'), ['rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id, 'nama_karyawan' => 'Siti', 'jenis_kelamin' => 'P'])->assertRedirect();
+        $this->post(route('pasien.store'), ['nip' => 'EMP-001', 'tanggal_lahir' => '1990-01-01', 'bagian' => 'Operasional', 'rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id, 'nama_karyawan' => 'Siti', 'jenis_kelamin' => 'P'])->assertRedirect();
         $patient = Karyawan::firstOrFail();
         $this->get(route('pasien.show', $patient))->assertOk();
         $this->get(route('pasien.edit', $patient))->assertOk();
-        $this->put(route('pasien.update', $patient), ['rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id, 'nama_karyawan' => 'Siti Baru', 'jenis_kelamin' => 'P'])->assertRedirect();
+        $this->put(route('pasien.update', $patient), ['nip' => 'EMP-001', 'tanggal_lahir' => '1990-01-01', 'bagian' => 'Operasional', 'rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id, 'nama_karyawan' => 'Siti Baru', 'jenis_kelamin' => 'P'])->assertRedirect();
         $this->assertSame('Siti Baru', $patient->fresh()->nama_karyawan);
         $this->delete(route('paket.destroy', $package))->assertSessionHasErrors('paket');
         $this->delete(route('pasien.destroy', $patient))->assertRedirect(route('pasien.index'));
@@ -110,7 +110,7 @@ class McuWorkflowTest extends TestCase
         $visit = RencanaKunjungan::create(['perusahaan_id' => $company->id, 'nomor_kunjungan' => 'XYZ-3', 'periode_kunjungan' => 'Oktober']);
         $other = RencanaKunjungan::create(['perusahaan_id' => $company->id, 'nomor_kunjungan' => 'XYZ-4', 'periode_kunjungan' => 'November']);
         $package = Paket::create(['perusahaan_id' => $company->id, 'rencana_kunjungan_id' => $other->id, 'nama_paket' => 'Lain', 'active_items' => ['tbc' => true]]);
-        $this->post(route('pasien.store'), ['rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id, 'nama_karyawan' => 'Siti', 'jenis_kelamin' => 'P'])->assertSessionHasNoErrors();
+        $this->post(route('pasien.store'), ['nip' => 'EMP-001', 'tanggal_lahir' => '1990-01-01', 'bagian' => 'Operasional', 'rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id, 'nama_karyawan' => 'Siti', 'jenis_kelamin' => 'P'])->assertSessionHasNoErrors();
         $this->assertDatabaseCount('karyawans', 1);
         $this->assertSame(2, $package->rencanaKunjungans()->count());
         $this->assertDatabaseHas('karyawans', ['paket_id' => $package->id, 'rencana_kunjungan_id' => $visit->id, 'perusahaan_id' => $company->id]);

@@ -155,7 +155,7 @@ class HrdWorkspaceTest extends TestCase
         $this->post(route('peserta.release', [$participant->rencana_kunjungan_id, $participant]), ['confirmed' => 1, 'lock_version' => 3])->assertSessionHasNoErrors();
         $this->post(route('peserta.status', [$participant->rencana_kunjungan_id, $participant]), ['status' => 'batal', 'reason' => 'Pembatalan setelah rilis'])->assertForbidden();
         $this->post(route('pemeriksaan.photo', [$participant->rencana_kunjungan_id, $participant]), ['foto_pasien' => UploadedFile::fake()->image('foto.png')])->assertForbidden();
-        $this->put(route('pasien.update', $participant), ['rencana_kunjungan_id' => $participant->rencana_kunjungan_id, 'paket_id' => $participant->paket_id, 'nama_karyawan' => 'Identitas berubah', 'jenis_kelamin' => 'L'])->assertForbidden();
+        $this->put(route('pasien.update', $participant), ['nip' => 'EMP-001', 'tanggal_lahir' => '1990-01-01', 'bagian' => 'Operasional', 'rencana_kunjungan_id' => $participant->rencana_kunjungan_id, 'paket_id' => $participant->paket_id, 'nama_karyawan' => 'Identitas berubah', 'jenis_kelamin' => 'L'])->assertForbidden();
         $this->assertSame('selesai', $participant->fresh()->status_pemeriksaan);
     }
 

@@ -2,7 +2,7 @@
 @section('title', $tab === 'ringkasan' ? 'Detail kunjungan MCU' : $tabs[$tab].' — Pemeriksaan MCU')
 @section('content')
 @php($examinationParameters = [$kunjungan, $peserta, ...$dashboardContext])
-<div class="mx-auto grid max-w-7xl gap-6">
+<div data-examination-page data-readonly="{{ $readonly ? '1' : '0' }}" class="mx-auto grid max-w-7xl gap-6">
     <a href="{{ $hrdReadonly || $dashboardContext ? $dashboardReturnUrl : route('kunjungan-mcu.show', $kunjungan) }}" class="text-sm font-semibold text-slate-500">← {{ $hrdReadonly || $dashboardContext ? 'Peserta & laporan' : 'Daftar peserta '.$kunjungan->nomor_kunjungan }}</a>
     <div><h2 class="text-2xl font-bold text-slate-900">{{ $tab === 'ringkasan' ? 'Detail kunjungan MCU' : $tabs[$tab] }}</h2><p class="mt-2 text-sm text-slate-500">{{ $hrdReadonly ? 'Hanya baca · hasil final yang sudah dirilis untuk perusahaan Anda.' : ($tab === 'ringkasan' ? 'Lengkapi pemeriksaan sebelum review, kesimpulan dokter, dan finalisasi.' : 'Catat hasil berdasarkan sumber pemeriksaan. Kosong bukan berarti normal.') }}</p></div>
     <section class="flex flex-wrap items-center gap-5 rounded-2xl border border-slate-200 bg-white p-6">

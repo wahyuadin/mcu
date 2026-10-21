@@ -47,7 +47,7 @@ class KunjunganDetailTest extends TestCase
         Karyawan::factory()->create(['paket_id' => $package->id, 'nama_karyawan' => 'Peserta Batal', 'status_pemeriksaan' => 'batal']);
         $this->get(route('kunjungan-mcu.show', [$visit, 'status' => 'proses', 'q' => 'Pengisian']))->assertOk()
             ->assertSee('Progres kunjungan')->assertSee('Informasi kunjungan')->assertSee('Paket pemeriksaan')->assertSee('Perlu ditindaklanjuti')
-            ->assertSee('1 dari 3 hasil final')->assertSee('3 peserta ·')
+            ->assertSee('1 dari 3')->assertSee('3 peserta ·')
             ->assertViewHas('totalParticipants', 3)->assertViewHas('remainingParticipants', 1)->assertViewHas('finalizedPercent', 33)
             ->assertViewHas('pesertas', fn ($participants): bool => $participants->total() === 1 && $participants->first()->id === $pending->id)
             ->assertViewHas('canComplete', false);

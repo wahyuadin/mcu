@@ -10,6 +10,8 @@ use App\Models\Karyawan;
 use App\Models\Paket;
 use App\Models\Perusahaan;
 use App\Models\RencanaKunjungan;
+use App\PatientSpreadsheet;
+use App\VisitParticipants;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +20,8 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use OwenIt\Auditing\Models\Audit;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
@@ -199,18 +203,45 @@ class McuController extends Controller
         return redirect()->route('rencana-kunjungan.show', $kunjungan)->with('success', 'Kunjungan dibuat.');
     }
 
-    public function show(Request $request, RencanaKunjungan $kunjungan): View
+    public function show(Request $request, RencanaKunjungan $kunjungan, VisitParticipants $participants): View|StreamedResponse
     {
         $kunjungan->load('perusahaan', 'pakets');
         $kunjungan->pakets->loadCount(['karyawans' => fn ($query) => $query->where('rencana_kunjungan_id', $kunjungan->id)]);
         $counts = $kunjungan->karyawans()->selectRaw('status_pemeriksaan, count(*) as total')->groupBy('status_pemeriksaan')->pluck('total', 'status_pemeriksaan');
         $total = (int) $counts->sum();
         $remaining = $total - (int) ($counts['selesai'] ?? 0) - (int) ($counts['batal'] ?? 0) - (int) ($counts['tidak_hadir'] ?? 0);
+        $workspace = $participants->data($kunjungan, $request);
+        if ($request->query('download') === 'xlsx') {
+            return response()->streamDownload(function () use ($kunjungan, $workspace): void {
+                $book = new Spreadsheet;
+                try {
+                    $rows = [];
+                    foreach ($kunjungan->karyawans()->with('paket')->whereKey($workspace['matchingIds'])->orderBy('nama_karyawan')->lazy(100) as $participant) {
+                        $row = [$participant->nomor_mcu, $participant->nama_karyawan, $participant->nip, $participant->paket->nama_paket, $workspace['attendance'][$participant->id] ? 'Present' : 'Not Present', $participant->status_pemeriksaan];
+                        foreach ($workspace['filterCards'] as $key => $card) {
+                            if (in_array($key, ['', 'registrasi', 'siap_finalisasi', 'selesai'], true)) {
+                                continue;
+                            }
+                            $section = $workspace['categoryProgress'][$participant->id][$key] ?? null;
+                            $row[] = $section ? ($section['status'] === 'Selesai' ? 'Sudah lengkap' : 'Belum lengkap') : 'Tidak termasuk paket';
+                        }
+                        $rows[] = $row;
+                    }
+                    $headers = ['Nomor MCU', 'Nama peserta', 'No. karyawan', 'Paket', 'Kehadiran', 'Status pemeriksaan'];
+                    foreach ($workspace['filterCards'] as $key => $card) {
+                        if (! in_array($key, ['', 'registrasi', 'siap_finalisasi', 'selesai'], true)) {
+                            $headers[] = $card['label'];
+                        }
+                    }
+                    (new PatientSpreadsheet)->writeSheet($book->getActiveSheet()->setTitle('Peserta MCU'), $headers, $rows);
+                    (new Xlsx($book))->save('php://output');
+                } finally {
+                    $book->disconnectWorksheets();
+                }
+            }, 'peserta-mcu-'.$kunjungan->id.'.xlsx', ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Cache-Control' => 'private, no-store']);
+        }
         $pesertas = $kunjungan->karyawans()->with('paket', 'anamnesa')
-            ->when($request->filled('q'), fn ($query) => $query->where(function ($query) use ($request): void {
-                $query->where('nama_karyawan', 'like', '%'.$request->query('q').'%')->orWhere('nomor_mcu', 'like', '%'.$request->query('q').'%')->orWhere('nip', 'like', '%'.$request->query('q').'%');
-            }))
-            ->when(in_array($request->query('status'), ['belum', 'proses', 'siap_finalisasi', 'selesai', 'batal', 'tidak_hadir'], true), fn ($query) => $query->where('status_pemeriksaan', $request->query('status')))
+            ->whereKey($workspace['matchingIds'])
             ->orderBy('nama_karyawan')->paginate(20)->withQueryString();
         $participantProgress = [];
         $photoEpisodes = Karyawan::whereIn('pasien_id', $pesertas->pluck('pasien_id')->filter()->all())
@@ -224,6 +255,7 @@ class McuController extends Controller
         }
 
         return view('mcu.show', [
+            ...$workspace,
             'kunjungan' => $kunjungan, 'pesertas' => $pesertas, 'counts' => $counts,
             'participantProgress' => $participantProgress, 'totalParticipants' => $total, 'remainingParticipants' => $remaining,
             'participantPhotos' => $participantPhotos,
@@ -331,10 +363,10 @@ class McuController extends Controller
             'paket_id' => ['required', Rule::exists('pakets', 'id')->whereNull('deleted_at')],
             'nama_karyawan' => ['required', 'string', 'max:255'],
             'nik' => ['nullable', 'digits:16'],
-            'nip' => ['nullable', 'string', 'max:50'],
+            'nip' => ['required', 'string', 'max:50'],
             'jenis_kelamin' => ['required', Rule::in(['L', 'P'])],
-            'tanggal_lahir' => ['nullable', 'date', 'before:today'],
-            'bagian' => ['nullable', 'string', 'max:255'],
+            'tanggal_lahir' => ['required', 'date', 'before:today'],
+            'bagian' => ['required', 'string', 'max:255'],
         ]);
         DB::transaction(function () use ($kunjungan, $data): void {
             $locked = RencanaKunjungan::whereKey($kunjungan->id)->lockForUpdate()->firstOrFail();

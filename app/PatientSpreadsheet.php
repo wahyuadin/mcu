@@ -29,7 +29,7 @@ class PatientSpreadsheet
         $packages = Paket::orderBy('nama_paket')->get();
         $this->writeSheet($sheet, self::HEADERS, [[
             'Wahyu Adi Nugroho', (string) random_int(1000000000000000, 9999999999999999), 'NYK-19423', '1', '2005-08-24',
-            '', '', '08'.str_pad((string) random_int(0, 9999999999), 10, '0', STR_PAD_LEFT), '',
+            'Operasional', '', '08'.str_pad((string) random_int(0, 9999999999), 10, '0', STR_PAD_LEFT), '',
             $visits->isNotEmpty() ? $visits->random()->id : '', $packages->isNotEmpty() ? $packages->random()->id : '', 'Bandung',
         ]]);
         foreach (['B', 'C', 'H', 'J', 'K'] as $column) {

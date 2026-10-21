@@ -11,8 +11,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use OwenIt\Auditing\Auditable as AuditableTrait;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -70,7 +70,17 @@ class Karyawan extends Model implements Auditable
     protected static function booted(): void
     {
         static::creating(function (Karyawan $episode): void {
-            $episode->nomor_mcu ??= 'MCU-'.strtoupper((string) Str::ulid());
+            $episode->nomor_mcu ??= DB::transaction(function () use ($episode): string {
+                $query = DB::table('visit_participant_numbers')->where('visit_id', $episode->rencana_kunjungan_id);
+                DB::table('visit_participant_numbers')->insertOrIgnore(['visit_id' => $episode->rencana_kunjungan_id, 'last_number' => 0]);
+                do {
+                    $query->increment('last_number');
+                    $counter = $query->lockForUpdate()->first();
+                    $number = 'NYK-'.str_pad((string) $counter->id, 3, '0', STR_PAD_LEFT).'-'.$counter->last_number;
+                } while (static::withTrashed()->where('nomor_mcu', $number)->exists());
+
+                return $number;
+            }, 5);
             if (! $episode->pasien_id) {
                 $episode->pasien_id = Pasien::create([
                     'nama' => $episode->nama_karyawan, 'nik' => $episode->nik,

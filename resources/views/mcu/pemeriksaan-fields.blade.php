@@ -22,15 +22,17 @@
             @if(!$hrdReadonly)<figure class="flex shrink-0 flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white p-4 lg:w-44"><img src="{{ $checkpoint['qrDataUri'] }}" alt="QR menuju pemeriksaan pasien" class="h-36 w-36"><figcaption class="text-center text-xs font-semibold text-slate-500">Scan untuk pemeriksaan</figcaption></figure>@endif
         </div>
         @if(!$readonly)<div class="flex flex-wrap gap-3 border-t border-slate-200 pt-5">
-            @can('manage-mcu')<a href="{{ route('pasien.edit', $peserta) }}" class="rounded-xl bg-blue-900 px-5 py-3 text-sm font-semibold text-white">Edit identitas pasien</a>@endcan
-            <button type="button" data-photo-modal-open aria-haspopup="dialog" aria-controls="patient-photo-modal" class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"><svg aria-hidden="true" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h4l2-3h4l2 3h4v13H4z"/><circle cx="12" cy="13" r="3" stroke-width="2"/></svg>Ganti foto pasien</button>
+            <button type="button" data-photo-modal-open aria-haspopup="dialog" aria-controls="patient-photo-modal" class="rounded-xl bg-blue-900 px-5 py-3 text-sm font-semibold text-white">Edit identitas pasien</button>
         </div>@endif
     </section>
     @if(!$hrdReadonly) @include('mcu.label-modal') @endif
     @if(!$readonly)
-        <dialog id="patient-photo-modal" data-photo-modal @if($errors->has('foto_pasien')) data-photo-modal-errors @endif aria-labelledby="patient-photo-modal-title" class="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-5xl overflow-y-auto rounded-2xl border-0 bg-slate-50 p-0 text-slate-900 shadow-xl">
-            <div class="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-slate-200 bg-white p-5"><div><h2 id="patient-photo-modal-title" class="text-lg font-bold">Ganti foto pasien</h2><p class="mt-1 text-sm text-slate-500">{{ $peserta->nama_karyawan }}</p></div><button type="button" data-photo-modal-close autofocus aria-label="Tutup modal foto" class="rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold">Tutup</button></div>
-            <div class="p-4 sm:p-6">@include('mcu.patient-photo-form', ['hasPhoto' => $peserta->hasStoredPhoto(), 'photoModal' => true])</div>
+        <dialog id="patient-photo-modal" data-photo-modal @if($errors->has('foto_pasien') || (old('identity_modal') && $errors->any())) data-photo-modal-errors @endif aria-labelledby="patient-photo-modal-title" class="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-5xl overflow-y-auto rounded-2xl border-0 bg-slate-50 p-0 text-slate-900 shadow-xl">
+            <div class="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-slate-200 bg-white p-5"><div><h2 id="patient-photo-modal-title" class="text-lg font-bold">Edit identitas pasien</h2><p class="mt-1 text-sm text-slate-500">{{ $peserta->nama_karyawan }}</p></div><button type="button" data-photo-modal-close autofocus aria-label="Tutup modal identitas" class="rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold">Tutup</button></div>
+            <div class="grid gap-6 p-4 sm:p-6">
+                @can('manage-mcu') @include('mcu.patient-identity-form') @endcan
+                <div><h3 class="mb-4 text-lg font-bold">Foto pasien</h3>@include('mcu.patient-photo-form', ['hasPhoto' => $peserta->hasStoredPhoto(), 'photoModal' => true])</div>
+            </div>
         </dialog>
     @endif
 @elseif($tab === 'anamnesa')

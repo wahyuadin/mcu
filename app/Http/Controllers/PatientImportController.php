@@ -67,7 +67,7 @@ class PatientImportController extends Controller
         $this->authorizeBatch($request, $batch);
         $rules = ['version' => ['required', 'integer', 'min:0'], 'mapping' => ['required', 'array:'.implode(',', PatientSpreadsheet::HEADERS)]];
         foreach (PatientSpreadsheet::HEADERS as $field) {
-            $rules['mapping.'.$field] = [in_array($field, ['nama_karyawan', 'jenis_kelamin', 'kunjungan_id', 'paket_id'], true) ? 'required' : 'nullable', Rule::in($batch->headers)];
+            $rules['mapping.'.$field] = [in_array($field, ['nama_karyawan', 'nip', 'tanggal_lahir', 'bagian', 'jenis_kelamin', 'kunjungan_id', 'paket_id'], true) ? 'required' : 'nullable', Rule::in($batch->headers)];
         }
         $data = $request->validate($rules);
         $chosen = array_filter($data['mapping'], fn ($header): bool => $header !== null);

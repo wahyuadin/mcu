@@ -129,6 +129,7 @@ class OperatorWorkflowTest extends TestCase
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
         $first = $this->participant(['hipertensi']);
+        $first->pasien->update(['nik' => '0012345678901234']);
         $this->save($first, 'anamnesa', ['anamnesa' => ['hipertensi' => ['answer' => 'Ya', 'note' => 'Hasil pertama']]]);
         $secondPackage = Paket::factory()->create();
         $this->post(route('pasien.store'), [
@@ -142,7 +143,7 @@ class OperatorWorkflowTest extends TestCase
         $this->save($second, 'anamnesa', ['anamnesa' => ['hipertensi' => ['answer' => 'Tidak']]]);
         $this->assertSame('Ya', $first->fresh()->anamnesa->historyValue('hipertensi')['answer']);
         $this->get(route('pasien.show', $second))->assertOk()->assertSee($first->nomor_mcu)->assertSee($second->nomor_mcu);
-        $this->post(route('pasien.store'), ['pasien_id' => $first->pasien_id, 'rencana_kunjungan_id' => $secondPackage->rencana_kunjungan_id, 'paket_id' => $secondPackage->id])
+        $this->post(route('pasien.store'), ['nip' => 'EMP-002', 'bagian' => 'Keuangan', 'pasien_id' => $first->pasien_id, 'rencana_kunjungan_id' => $secondPackage->rencana_kunjungan_id, 'paket_id' => $secondPackage->id])
             ->assertSessionHasErrors('pasien_id');
         $this->assertSame(2, $first->pasien->episodes()->count());
         $this->get(route('pasien.index'))->assertOk()->assertViewHas('pasiens', fn ($patients): bool => $patients->total() === 1);

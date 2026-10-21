@@ -603,8 +603,9 @@ class PemeriksaanController extends Controller
             DB::transaction(function () use ($request, $kunjungan, $peserta, $photos, &$path): void {
                 $this->lockEditable($kunjungan, $peserta);
                 abort_if($peserta->anamnesa?->status === 'final', 403, 'Foto hasil final hanya dapat diganti setelah revisi dibuka.');
+                $date = ! $peserta->hasStoredPhoto() || $peserta->tanggal_mcu === null ? now()->toDateString() : $peserta->tanggal_mcu;
                 $path = $photos->store($request->file('foto_pasien'), $peserta);
-                $peserta->update(['foto' => $path]);
+                $peserta->update(['foto' => $path, 'tanggal_mcu' => $date]);
                 if ($peserta->anamnesa) {
                     $peserta->anamnesa->increment('lock_version');
                 }

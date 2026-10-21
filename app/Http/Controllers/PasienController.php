@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -118,6 +119,9 @@ class PasienController extends Controller
     public function update(Request $request, Karyawan $pasien): RedirectResponse
     {
         $data = $this->validated($request);
+        if ($request->input('identity_modal') === '1') {
+            unset($data['tanggal_mcu']);
+        }
         DB::transaction(function () use ($data, $pasien): void {
             $originalVisit = RencanaKunjungan::whereKey($pasien->rencana_kunjungan_id)->lockForUpdate()->firstOrFail();
             $pasien->refresh();
@@ -146,6 +150,10 @@ class PasienController extends Controller
             ]);
         });
 
+        if ($request->input('identity_modal') === '1') {
+            return redirect()->route('pemeriksaan.edit', [$pasien->rencana_kunjungan_id, $pasien, 'tab' => 'identitas'])->with('success', 'Identitas pasien diperbarui.');
+        }
+
         return redirect()->route('pasien.show', $pasien)->with('success', 'Pasien diperbarui.');
     }
 
@@ -169,11 +177,11 @@ class PasienController extends Controller
             'paket_id' => ['required', Rule::exists('pakets', 'id')->whereNull('deleted_at')],
             'nama_karyawan' => [Rule::requiredIf(! $usingExisting), 'nullable', 'string', 'max:255'],
             'nik' => ['nullable', 'digits:16'],
-            'nip' => ['nullable', 'string', 'max:50'],
+            'nip' => ['required', 'string', 'max:50'],
             'jenis_kelamin' => [Rule::requiredIf(! $usingExisting), 'nullable', Rule::in(['L', 'P'])],
-            'tanggal_lahir' => ['nullable', 'date', 'before:today'],
+            'tanggal_lahir' => [Rule::requiredIf(! $usingExisting), 'nullable', 'date', 'before:today'],
             'tempat_lahir' => ['nullable', 'string', 'max:255'],
-            'bagian' => ['nullable', 'string', 'max:255'],
+            'bagian' => ['required', 'string', 'max:255'],
             'jabatan' => ['nullable', 'string', 'max:255'],
             'telepon' => ['nullable', 'string', 'max:255'],
             'tanggal_mcu' => ['nullable', 'date'],
@@ -184,6 +192,10 @@ class PasienController extends Controller
                 'nama_karyawan' => $identity->nama, 'nik' => $identity->nik, 'jenis_kelamin' => $identity->jenis_kelamin,
                 'tanggal_lahir' => $identity->tanggal_lahir, 'telepon' => $identity->telepon, 'foto' => $identity->foto, 'tempat_lahir' => $identity->tempat_lahir,
             ]);
+            Validator::make($data, [
+                'nik' => ['nullable', 'digits:16'],
+                'tanggal_lahir' => ['required', 'date', 'before:today'],
+            ], ['required' => ':attribute pada master pasien wajib dilengkapi terlebih dahulu.'], ['nik' => 'NIK identitas', 'tanggal_lahir' => 'Tanggal lahir'])->validate();
         } elseif ($request->routeIs('pasien.store')) {
             unset($data['pasien_id']);
         }

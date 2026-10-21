@@ -66,10 +66,10 @@ class PatientImport
             };
             $validator = Validator::make($data, [
                 'nama_karyawan' => ['required', 'string', 'max:255'], 'nik' => ['nullable', 'digits:16'],
-                'nip' => ['nullable', 'string', 'max:50'], 'jenis_kelamin' => ['required', Rule::in(['L', 'P'])],
-                'tanggal_lahir' => ['nullable', 'date_format:Y-m-d', 'before:today'], 'tanggal_mcu' => ['nullable', 'date_format:Y-m-d'],
+                'nip' => ['required', 'string', 'max:50'], 'jenis_kelamin' => ['required', Rule::in(['L', 'P'])],
+                'tanggal_lahir' => ['required', 'date_format:Y-m-d', 'before:today'], 'tanggal_mcu' => ['nullable', 'date_format:Y-m-d'],
                 'tempat_lahir' => ['nullable', 'string', 'max:255'],
-                'bagian' => ['nullable', 'string', 'max:255'], 'jabatan' => ['nullable', 'string', 'max:255'],
+                'bagian' => ['required', 'string', 'max:255'], 'jabatan' => ['nullable', 'string', 'max:255'],
                 'telepon' => ['nullable', 'string', 'max:255'], 'kunjungan_id' => ['required', 'uuid'], 'paket_id' => ['required', 'uuid'],
             ], ['required' => ':attribute wajib diisi.', 'in' => ':attribute harus 1 (Laki-laki) atau 2 (Perempuan). Kode L/P juga diterima.', 'uuid' => ':attribute harus berupa ID dari master.',
                 'date_format' => ':attribute harus YYYY-MM-DD.', 'before' => ':attribute harus sebelum hari ini.',

@@ -43,6 +43,7 @@ class PatientImportTest extends TestCase
         $this->assertSame('NYK-19423', $sample->getCell('C2')->getValue());
         $this->assertSame('1', $sample->getCell('D2')->getValue());
         $this->assertSame('2005-08-24', $sample->getCell('E2')->getValue());
+        $this->assertSame('Operasional', $sample->getCell('F2')->getValue());
         $this->assertMatchesRegularExpression('/^08[0-9]{10}$/', $sample->getCell('H2')->getValue());
         $this->assertSame(DataType::TYPE_STRING, $sample->getCell('H2')->getDataType());
         $this->assertSame($visit->id, $sample->getCell('J2')->getValue());
@@ -140,7 +141,7 @@ class PatientImportTest extends TestCase
         $batch = $this->stage([
             ['Ayu', '0012345678901234', 'EMP-001', 'P', '1990-01-01', 'Produksi', 'Operator', '081234567890', '', $visit->id, $package->id],
             [],
-            ['Budi', '', 'EMP-002', 'L', Date::PHPToExcel(new \DateTime('1991-02-03')), '', '', '', '2026-10-09', $second->id, $another->id],
+            ['Budi', '0012345678901235', 'EMP-002', 'L', Date::PHPToExcel(new \DateTime('1991-02-03')), 'Operasional', '', '', '2026-10-09', $second->id, $another->id],
         ]);
         $this->assertSame(2, $batch['stats']['ready']);
         $this->assertSame(0, $batch['version']);
@@ -155,7 +156,7 @@ class PatientImportTest extends TestCase
         $this->assertSame(now()->toDateString(), $ayu->tanggal_mcu->toDateString());
         $this->assertSame($visit->perusahaan_id, $ayu->perusahaan_id);
         $this->assertSame($package->id, $ayu->paket_id);
-        $this->assertStringStartsWith('MCU-', $ayu->nomor_mcu);
+        $this->assertStringStartsWith('NYK-', $ayu->nomor_mcu);
         $this->assertNull($ayu->foto);
         $budi = Karyawan::where('nama_karyawan', 'Budi')->firstOrFail();
         $this->assertSame('1991-02-03', $budi->tanggal_lahir->toDateString());
@@ -182,7 +183,7 @@ class PatientImportTest extends TestCase
         $this->assertSame('3', $book->getSheetByName('Gagal')->getCell('A2')->getValue());
         $this->assertSame('Invalid', $book->getSheetByName('Gagal')->getCell('B2')->getValue());
         $this->assertStringContainsString('harus 1 (Laki-laki) atau 2 (Perempuan)', $book->getSheetByName('Gagal')->getCell('N2')->getValue());
-        $this->assertStringStartsWith('MCU-', $book->getSheetByName('Berhasil')->getCell('N2')->getValue());
+        $this->assertStringStartsWith('NYK-', $book->getSheetByName('Berhasil')->getCell('N2')->getValue());
         $book->disconnectWorksheets();
         $this->postJson($batch['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 1);
         $rows[1][3] = 'P';
@@ -234,9 +235,9 @@ class PatientImportTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin']));
         $visit = RencanaKunjungan::factory()->create();
         $package = Paket::factory()->master()->create();
-        $batch = $this->stage([['Nama', 'L', $visit->id, $package->id]], ['Nama', 'Gender', 'Visit', 'Package']);
+        $batch = $this->stage([['Nama', 'L', $visit->id, $package->id, 'EMP-001', '1990-01-01', 'Operasional']], ['Nama', 'Gender', 'Visit', 'Package', 'Karyawan', 'Lahir', 'Departemen']);
         $mapping = array_fill_keys(PatientSpreadsheet::HEADERS, null);
-        $mapping = [...$mapping, 'nama_karyawan' => 'Nama', 'jenis_kelamin' => 'Gender', 'kunjungan_id' => 'Visit', 'paket_id' => 'Package'];
+        $mapping = [...$mapping, 'nama_karyawan' => 'Nama', 'jenis_kelamin' => 'Gender', 'kunjungan_id' => 'Visit', 'paket_id' => 'Package', 'nip' => 'Karyawan', 'tanggal_lahir' => 'Lahir', 'bagian' => 'Departemen'];
         $this->patchJson($batch['mapping_url'], ['mapping' => $mapping, 'version' => 0])->assertOk()->assertJsonPath('stats.ready', 1)->assertJsonPath('version', 1);
         $this->postJson($batch['confirm_url'], ['version' => 0])->assertUnprocessable()->assertJsonValidationErrors('version');
         $this->patchJson($batch['mapping_url'], ['mapping' => [...$mapping, 'nip' => 'Nama'], 'version' => 1])->assertUnprocessable()->assertJsonValidationErrors('mapping');
@@ -382,10 +383,22 @@ class PatientImportTest extends TestCase
         $this->get(route('pasien.import.report', $batch))->assertForbidden();
     }
 
+    public function test_national_nik_is_optional_but_employee_number_is_required_for_import(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+        $package = Paket::factory()->create();
+        $row = $this->row('Tanpa KTP', $package->rencanaKunjungan, $package);
+        $row[1] = '';
+        $batch = $this->stage([$row]);
+        $this->assertSame(1, $batch['stats']['ready']);
+        $this->postJson($batch['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 1);
+        $this->assertDatabaseHas('karyawans', ['nik' => null, 'nip' => $row[2]]);
+    }
+
     /** @return list<string> */
     private function row(string $name, RencanaKunjungan $visit, Paket $package, string $gender = 'L'): array
     {
-        return [$name, '', '', $gender, '', '', '', '', '', $visit->id, $package->id];
+        return [$name, str_pad(sprintf('%u', crc32($name)), 16, '0', STR_PAD_LEFT), 'EMP-'.sprintf('%u', crc32($name)), $gender, '1988-04-17', 'Operasional', '', '', '', $visit->id, $package->id];
     }
 
     /** @param list<array<int, mixed>> $rows
