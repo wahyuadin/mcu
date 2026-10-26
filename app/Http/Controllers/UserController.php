@@ -30,7 +30,7 @@ class UserController extends Controller
                 $query->where('name', 'like', '%'.$search.'%')->orWhere('email', 'like', '%'.$search.'%')->orWhere('username', 'like', '%'.$search.'%');
             }))->orderBy('name')->orderBy('id')->paginate(30)->withQueryString(),
             'search' => $search,
-            'roles' => ['admin' => 'Admin', 'petugas' => 'Petugas', 'hrd' => 'HRD'],
+            'roles' => ['admin' => 'Master Admin', 'dokter' => 'Dokter', 'petugas' => 'Petugas', 'hrd' => 'HRD'],
             'companies' => Perusahaan::orderBy('nama_perusahaan')->get(),
             'editingUser' => is_string($editingId) && Str::isUuid($editingId) ? User::find($editingId) : null,
         ]);
@@ -179,7 +179,7 @@ class UserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'username' => ['nullable', 'string', 'max:255', 'regex:/^[A-Za-z0-9._-]+$/', Rule::unique('users', 'username')->ignore($user)],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user)],
-            'role' => ['required', Rule::in(['admin', 'petugas', 'hrd'])],
+            'role' => ['required', Rule::in(['admin', 'dokter', 'petugas', 'hrd'])],
             'perusahaan_id' => ['nullable', 'required_if:role,hrd', 'uuid', Rule::exists('perusahaans', 'id')->whereNull('deleted_at')],
             'password' => [$user ? 'nullable' : 'required', 'string', 'min:8', 'max:255', 'confirmed'],
             'avatar' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048', 'dimensions:max_width=4096,max_height=4096'],

@@ -54,6 +54,9 @@ class McuCategoryController extends Controller
     {
         DB::transaction(function () use ($category): void {
             $category = McuCategory::whereKey($category->id)->lockForUpdate()->firstOrFail();
+            if ($category->isProtected()) {
+                throw ValidationException::withMessages(['category' => 'Kategori bawaan tidak dapat dihapus.']);
+            }
             if ($category->subcategories()->exists()) {
                 throw ValidationException::withMessages(['category' => 'Kategori masih memiliki subkategori. Hapus atau pindahkan subkategori terlebih dahulu.']);
             }
@@ -78,6 +81,7 @@ class McuCategoryController extends Controller
     {
         return $request->validate(['name' => ['required', 'string', 'max:255'], 'sort_order' => ['sometimes', 'integer', 'min:0', 'max:9999'], 'is_active' => ['required', 'boolean'], 'has_responsible_doctor' => ['sometimes', 'required', 'boolean'],
             'label_enabled' => ['sometimes', 'required', 'boolean'],
+            'import_enabled' => ['sometimes', 'required', 'boolean'],
             'label_barcode_type' => ['required_if:label_enabled,1', Rule::in(['qr', 'code128'])],
             'label_width_mm' => ['required_if:label_enabled,1', 'integer', 'min:40', 'max:300'],
             'label_height_mm' => ['required_if:label_enabled,1', 'integer', 'min:30', 'max:200'],

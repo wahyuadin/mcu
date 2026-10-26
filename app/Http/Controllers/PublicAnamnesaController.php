@@ -131,17 +131,24 @@ class PublicAnamnesaController extends Controller
                         $request->merge(['answers' => $answers]);
                     }
                 }
-                $rules = ['confirmed' => ['accepted'], 'answers' => ['required', 'array:'.implode(',', array_keys($definitions))]];
+                $hasRequiredQuestions = collect($definitions)->contains(fn (array $item): bool => $item['required'] ?? true);
+                $rules = ['confirmed' => ['accepted'], 'answers' => [$hasRequiredQuestions ? 'required' : 'sometimes', 'array:'.implode(',', array_keys($definitions))]];
                 foreach ($definitions as $key => $item) {
-                    $rules['answers.'.$key] = ['required', 'array:answer,note'];
-                    $rules['answers.'.$key.'.answer'] = ['required', 'string', 'max:2000'];
+                    $rules['answers.'.$key] = [($item['required'] ?? true) ? 'required' : 'sometimes', 'array:answer,note'];
+                    $rules['answers.'.$key.'.answer'] = [($item['required'] ?? true) ? 'required' : 'nullable', ...($item['type'] === 'number' ? ['numeric', 'between:-999999999,999999999'] : ['string', 'max:2000'])];
                     if ($item['type'] === 'choice') {
                         $rules['answers.'.$key.'.answer'][] = Rule::in(['Ya', 'Tidak']);
                     }
                     $rules['answers.'.$key.'.note'] = ['nullable', 'string', 'max:2000'];
                 }
                 $data = $request->validate($rules);
-                $data['answers'] = array_map(fn (array $answer): array => array_replace(['note' => null], $answer), $data['answers']);
+                $data['answers'] = array_map(fn (array $answer): array => array_replace(['note' => null], $answer), $data['answers'] ?? []);
+                foreach ($data['answers'] as $key => &$answer) {
+                    if ($definitions[$key]['type'] === 'choice' && ($answer['answer'] ?? null) !== 'Ya') {
+                        $answer['note'] = null;
+                    }
+                }
+                unset($answer);
                 $participant->anamnesa_submission = ['id' => bin2hex(random_bytes(16)), 'groups' => $groups, 'answers' => $data['answers'], 'submitted_at' => now()->toIso8601String(), 'reviewed_at' => null];
                 $participant->save();
             });

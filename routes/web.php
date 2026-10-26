@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CategoryResultImportController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DokterController;
 use App\Http\Controllers\HrdController;
@@ -63,12 +64,19 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/exports/{export}', [HrdController::class, 'exportStatus'])->name('exports.status');
         Route::get('/exports/{export}/download', [HrdController::class, 'download'])->name('exports.download');
     });
+    Route::get('/kunjungan-mcu', [McuController::class, 'kunjunganMcu'])->middleware('can:view-visits')->name('kunjungan-mcu.index');
+    Route::get('/kunjungan-mcu/{kunjungan}', [McuController::class, 'show'])->middleware('can:view-visits')->name('kunjungan-mcu.show');
+    Route::prefix('kunjungan-mcu/{kunjungan}/import-hasil')->name('category-import.')->middleware(['can:import-category-results', 'throttle:20,1,category-results-import'])->group(function (): void {
+        Route::get('/kategori', [CategoryResultImportController::class, 'categories'])->name('categories');
+        Route::get('/{category}/template', [CategoryResultImportController::class, 'template'])->name('template');
+        Route::post('/{category}', [CategoryResultImportController::class, 'store'])->name('store');
+        Route::post('/{category}/{batch}/confirm', [CategoryResultImportController::class, 'confirm'])->name('confirm');
+        Route::get('/{category}/{batch}/report', [CategoryResultImportController::class, 'report'])->name('report');
+    });
     Route::middleware('can:view-patients')->group(function (): void {
-        Route::get('/kunjungan-mcu', [McuController::class, 'kunjunganMcu'])->name('kunjungan-mcu.index');
         Route::get('/perusahaan/{perusahaan}/logo', [McuController::class, 'perusahaanLogo'])->name('perusahaan.logo');
         Route::get('/pasien', [PasienController::class, 'index'])->name('pasien.index');
         Route::get('/pasien/{pasien}', [PasienController::class, 'show'])->whereUuid('pasien')->name('pasien.show');
-        Route::get('/kunjungan-mcu/{kunjungan}', [McuController::class, 'show'])->name('kunjungan-mcu.show');
         Route::get('/laporan-riwayat', [LaporanRiwayatController::class, 'index'])->name('laporan-riwayat.index');
         Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/laporan-riwayat', [LaporanRiwayatController::class, 'show'])->name('pemeriksaan.laporan-riwayat');
         Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/laporan-riwayat/versi/{version}', [LaporanRiwayatController::class, 'showVersion'])->name('pemeriksaan.laporan-riwayat.version');

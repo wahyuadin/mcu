@@ -96,11 +96,12 @@
                 <div class="divide-y divide-slate-200">
                     @forelse($pesertas as $peserta)
                         @php($completion = $participantProgress[$peserta->id])
+                        @php($participantUrl = auth()->user()->can('view-patients') ? route('pasien.show', $peserta) : route('pemeriksaan.edit', [$kunjungan, $peserta]))
                         <article data-participant="{{ $peserta->id }}"
                             class="grid items-center gap-4 py-5 sm:grid-cols-[minmax(0,1fr)_auto]">
                             <div class="flex min-w-0 items-center gap-3">
                                 @php($photoEpisode = $participantPhotos[$peserta->id])
-                                <a href="{{ route('pasien.show', $peserta) }}"
+                                <a href="{{ $participantUrl }}"
                                     aria-label="Profil {{ $peserta->nama_karyawan }}"
                                     class="shrink-0 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700">
                                     @if ($photoEpisode)
@@ -118,7 +119,7 @@
                                 </a>
                                 <div class="min-w-0">
                                     <div class="flex flex-wrap items-center gap-2"><a
-                                            href="{{ route('pasien.show', $peserta) }}"
+                                            href="{{ $participantUrl }}"
                                             class="min-w-0 break-words font-bold text-slate-900 hover:text-emerald-700">{{ $peserta->nama_karyawan }}</a><span
                                             data-participant-attendance
                                             class="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold {{ $attendance[$peserta->id] ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800' }}">{{ $attendance[$peserta->id] ? 'Present' : 'Not Present' }}</span>
@@ -138,9 +139,9 @@
                                     aria-label="Progres pemeriksaan {{ $peserta->nama_karyawan }}"
                                     class="exam-completion h-1.5 w-full overflow-hidden rounded-full">{{ $completion['percent'] }}%</progress>
                             </div>
-                            @can('examine-mcu')
+                            @can('view-examination', $peserta)
                                 <a href="{{ route('pemeriksaan.edit', [$kunjungan, $peserta]) }}"
-                                    class="rounded-xl border border-slate-300 px-4 py-3 text-center text-sm font-bold hover:border-emerald-700 hover:bg-emerald-50">{{ $kunjungan->is_closing || in_array($peserta->status_pemeriksaan, ['selesai', 'batal', 'tidak_hadir'], true) ? 'Lihat hasil' : ($peserta->status_pemeriksaan === 'siap_finalisasi' ? 'Review hasil' : ($peserta->status_pemeriksaan === 'belum' ? 'Mulai pengisian' : 'Buka pemeriksaan')) }}
+                                    class="rounded-xl border border-slate-300 px-4 py-3 text-center text-sm font-bold hover:border-emerald-700 hover:bg-emerald-50">{{ !auth()->user()->can('examine-mcu') ? 'Buka kategori pemeriksaan' : ($kunjungan->is_closing || in_array($peserta->status_pemeriksaan, ['selesai', 'batal', 'tidak_hadir'], true) ? 'Lihat hasil' : ($peserta->status_pemeriksaan === 'siap_finalisasi' ? 'Review hasil' : ($peserta->status_pemeriksaan === 'belum' ? 'Mulai pengisian' : 'Buka pemeriksaan'))) }}
                                 →</a>@else<a href="{{ route('pasien.show', $peserta) }}"
                                     class="rounded-xl border border-slate-300 px-4 py-3 text-center text-sm font-semibold">Lihat
                                     peserta →</a>

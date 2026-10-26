@@ -42,11 +42,11 @@ class LaboratoryConfigurationTest extends TestCase
         $category = McuCategory::factory()->create(['name' => 'HASIL PEMERIKSAAN LABORATORIUM']);
         $this->get(route('mcu-subcategory.create'))->assertOk();
         $this->post(route('mcu-subcategory.store'), ['mcu_category_id' => $category->id, 'name' => 'HEMATOLOGI', 'is_active' => 1])->assertSessionHasNoErrors();
-        $subcategory = McuSubcategory::firstOrFail();
+        $subcategory = $category->subcategories()->firstOrFail();
         $this->get(route('mcu-subcategory.index'))->assertOk()->assertSee('HEMATOLOGI');
         $this->get(route('mcu-subcategory.edit', $subcategory))->assertOk()->assertSee('HEMATOLOGI');
         $this->post(route('mcu-item.store'), $this->payload($subcategory))->assertSessionHasNoErrors();
-        $item = McuItem::firstOrFail();
+        $item = McuItem::where('mcu_subcategory_id', $subcategory->id)->firstOrFail();
         $this->assertSame('g/dL', $item->lab_config['unit']);
         $this->assertSame($subcategory->id, $item->mcu_subcategory_id);
         $this->get(route('mcu-item.edit', $item))->assertOk()->assertSee('Mapping hasil laporan')->assertDontSee('Konfigurasi laboratorium')->assertSee('Dalam batas normal');
@@ -79,7 +79,7 @@ class LaboratoryConfigurationTest extends TestCase
         $payload['mcu_category_id'] = $other->id;
         $this->post(route('mcu-item.store'), $payload)->assertSessionHasErrors('mcu_subcategory_id');
         $this->post(route('mcu-item.store'), $this->payload($subcategory))->assertSessionHasNoErrors();
-        $item = McuItem::firstOrFail();
+        $item = McuItem::where('mcu_subcategory_id', $subcategory->id)->firstOrFail();
         $this->put(route('mcu-subcategory.update', $subcategory), ['mcu_category_id' => $other->id, 'name' => 'Pindah', 'is_active' => 1])->assertSessionHasErrors('mcu_category_id');
         $this->assertSame($subcategory->mcu_category_id, $subcategory->fresh()->mcu_category_id);
         $subcategory->update(['is_active' => false]);
@@ -130,7 +130,7 @@ class LaboratoryConfigurationTest extends TestCase
         $payload['questions'][0] = array_replace($payload['questions'][0], $changes);
 
         $this->post(route('mcu-item.store'), $payload)->assertSessionHasErrors('questions.0.'.$error);
-        $this->assertDatabaseCount('mcu_items', 0);
+        $this->assertSame(0, McuItem::where('mcu_subcategory_id', $subcategory->id)->count());
     }
 
     public static function invalidConfigurations(): array
@@ -213,7 +213,7 @@ class LaboratoryConfigurationTest extends TestCase
         $payload = $this->payload($subcategory);
         $payload['questions'][0] = array_replace($payload['questions'][0], ['input_type' => 'text', 'lab_rule' => 'text', 'lab_normal_values' => "Negatif\nTidak ditemukan", 'lab_normal_report' => '', 'lab_abnormal_report' => '<script>temuan</script>']);
         $this->post(route('mcu-item.store'), $payload)->assertSessionHasNoErrors();
-        $item = McuItem::firstOrFail();
+        $item = McuItem::where('mcu_subcategory_id', $subcategory->id)->firstOrFail();
         $this->assertSame('', $item->lab_config['normal_report']);
         $this->assertSame(['Negatif', 'Tidak ditemukan'], $item->lab_config['normal_values']);
         $package = Paket::factory()->master()->create(['active_items' => [], 'dynamic_schema' => [['id' => $subcategory->mcu_category_id, 'name' => 'Laboratorium', 'order' => 0, 'items' => [$item->definition()]]]]);
@@ -285,7 +285,7 @@ class LaboratoryConfigurationTest extends TestCase
             $payload['questions'][0]['lab_normal_values'] = 'Negatif';
         }
         $this->post(route('mcu-item.store'), $payload)->assertSessionHasNoErrors();
-        $item = McuItem::firstOrFail();
+        $item = McuItem::where('mcu_subcategory_id', $subcategory->id)->firstOrFail();
         $this->assertSame($type, $item->input_type);
         $this->assertSame($type, $item->lab_config['result_type']);
         $this->get(route('mcu-item.edit', $item))->assertOk()->assertSee('Mapping hasil laporan')->assertSee('value="'.$type.'" selected', false);
@@ -318,7 +318,7 @@ class LaboratoryConfigurationTest extends TestCase
             ->assertDontSee('value="laboratory"', false)->assertDontSee('Konfigurasi laboratorium');
         $subcategory = McuSubcategory::factory()->create();
         $this->post(route('mcu-item.store'), $this->payload($subcategory))->assertSessionHasNoErrors();
-        $item = McuItem::firstOrFail();
+        $item = McuItem::where('mcu_subcategory_id', $subcategory->id)->firstOrFail();
         $item->update(['input_type' => 'laboratory']);
 
         $this->get(route('mcu-item.edit', $item))->assertOk()->assertSee('value="number" selected', false)->assertDontSee('value="laboratory"', false)->assertSee('12–16');
@@ -340,7 +340,7 @@ class LaboratoryConfigurationTest extends TestCase
             $payload['questions'][0]['lab_normal_values'] = 'Negatif';
         }
         $this->post(route('mcu-item.store'), $payload)->assertSessionHasNoErrors();
-        $item = McuItem::firstOrFail();
+        $item = McuItem::where('mcu_subcategory_id', $subcategory->id)->firstOrFail();
         $this->assertSame($default, $item->lab_config['default_result']);
         $this->post(route('paket.store'), ['nama_paket' => 'Paket default', 'master_items' => [$item->id]])->assertSessionHasNoErrors();
         $package = Paket::firstOrFail();
@@ -394,7 +394,7 @@ class LaboratoryConfigurationTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin']));
         $subcategory = McuSubcategory::factory()->create(['name' => 'HEMATOLOGI']);
         $this->post(route('mcu-item.store'), $this->payload($subcategory))->assertSessionHasNoErrors();
-        $item = McuItem::firstOrFail();
+        $item = McuItem::where('mcu_subcategory_id', $subcategory->id)->firstOrFail();
         $this->post(route('paket.store'), ['nama_paket' => 'Paket Lab', 'master_items' => [$item->id]])->assertSessionHasNoErrors();
         $package = Paket::firstOrFail();
         $participant = Karyawan::factory()->withPhoto()->create();

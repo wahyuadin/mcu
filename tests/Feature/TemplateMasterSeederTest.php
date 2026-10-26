@@ -30,17 +30,17 @@ class TemplateMasterSeederTest extends TestCase
 
         $this->seed(McuTemplateMasterSeeder::class);
 
-        $this->assertSame(['LAB', 'HASIL PEMERIKSAAN RONTGEN THORAKS', 'HASIL PEMERIKSAAN EKG'], McuCategory::orderBy('sort_order')->pluck('name')->all());
-        $this->assertDatabaseCount('mcu_subcategories', 11);
-        $this->assertDatabaseCount('mcu_items', 63);
+        $this->assertSame(['LAB', 'HASIL PEMERIKSAAN RONTGEN THORAKS', 'HASIL PEMERIKSAAN EKG'], McuCategory::whereNull('legacy_group')->orderBy('sort_order')->pluck('name')->all());
+        $this->assertDatabaseCount('mcu_subcategories', 22);
+        $this->assertDatabaseCount('mcu_items', 141);
         $this->assertDatabaseCount('karyawans', 0);
         $this->assertDatabaseCount('anamnesas', 0);
         $this->assertDatabaseCount('dokters', 0);
         $this->assertDatabaseCount('pakets', 0);
-        $this->assertSame(0, McuCategory::where('has_responsible_doctor', false)->count());
+        $this->assertSame(2, McuCategory::where('has_responsible_doctor', false)->count());
         $this->assertSame(0, McuItem::whereNotIn('input_type', ['text', 'number', 'radio'])->count());
-        $this->assertSame(0, McuItem::where('label', 'like', 'Visus Mata%')->count());
-        $this->assertSame(0, McuItem::whereIn('label', ['Tinggi Badan (cm)', 'Hipertensi', 'Keluhan Sekarang', 'Kulit'])->count());
+        $this->assertSame(0, McuItem::whereHas('category', fn ($query) => $query->whereNull('legacy_group'))->where('label', 'like', 'Visus Mata%')->count());
+        $this->assertSame(0, McuItem::whereHas('category', fn ($query) => $query->whereNull('legacy_group'))->whereIn('label', ['Tinggi Badan (cm)', 'Hipertensi', 'Keluhan Sekarang', 'Kulit'])->count());
         foreach (McuItem::whereNotNull('lab_config')->get() as $item) {
             $this->assertArrayNotHasKey('default_result', $item->lab_config);
             $this->assertSame('laboratory', $item->definition()['type']);
@@ -91,9 +91,9 @@ class TemplateMasterSeederTest extends TestCase
         $this->assertSame('Irama', $item->fresh()->label);
         $this->assertTrue($item->fresh()->is_active);
         $this->assertModelMissing($custom);
-        $this->assertDatabaseCount('mcu_categories', 3);
-        $this->assertDatabaseCount('mcu_subcategories', 11);
-        $this->assertDatabaseCount('mcu_items', 63);
+        $this->assertDatabaseCount('mcu_categories', 5);
+        $this->assertDatabaseCount('mcu_subcategories', 22);
+        $this->assertDatabaseCount('mcu_items', 141);
         $this->assertSame($packageBefore, $participant->paket->fresh()->toArray());
         $this->assertSame($examBefore, $exam->fresh()->toArray());
     }
@@ -114,9 +114,9 @@ class TemplateMasterSeederTest extends TestCase
         $this->assertSame(['HEMATOLOGI', 'HITUNG JENIS LEUKOSIT', 'GLUKOSA', 'FAAL HATI', 'FAAL GINJAL', 'PROFIL LIPID', 'ELEKTROLIT', 'SEROLOGI', 'URINALISA', 'DRUG TEST', 'OTHERS'], $lab->subcategories->pluck('name')->all());
         $this->assertSame(53, $lab->items()->count());
         $this->assertSame(0, $lab->items()->whereNull('mcu_subcategory_id')->count());
-        $this->assertDatabaseCount('mcu_categories', 3);
-        $this->assertDatabaseCount('mcu_subcategories', 11);
-        $this->assertDatabaseCount('mcu_items', 63);
+        $this->assertDatabaseCount('mcu_categories', 5);
+        $this->assertDatabaseCount('mcu_subcategories', 22);
+        $this->assertDatabaseCount('mcu_items', 141);
     }
 
     public function test_database_seed_updates_admin_password_without_duplicate_users_and_login_works(): void
@@ -142,7 +142,7 @@ class TemplateMasterSeederTest extends TestCase
     {
         $this->seed(DatabaseSeeder::class);
         $this->actingAs(User::where('username', 'admin')->firstOrFail());
-        $this->post(route('paket.store'), ['nama_paket' => 'Paket sesuai template', 'items' => ['tinggi_badan', 'keluhan_saat_ini'], 'master_items' => McuItem::orderBy('sort_order')->pluck('id')->all()])->assertSessionHasNoErrors();
+        $this->post(route('paket.store'), ['nama_paket' => 'Paket sesuai template', 'items' => ['tinggi_badan', 'keluhan_saat_ini'], 'master_items' => McuItem::whereHas('category', fn ($query) => $query->whereNull('legacy_group'))->orderBy('sort_order')->pluck('id')->all()])->assertSessionHasNoErrors();
         $package = Paket::where('nama_paket', 'Paket sesuai template')->firstOrFail();
         $participant = Karyawan::factory()->withPhoto()->create();
         $participant->rencanaKunjungan->pakets()->attach($package);

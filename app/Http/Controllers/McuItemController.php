@@ -60,10 +60,13 @@ class McuItemController extends Controller
     public function update(Request $request, McuItem $item): RedirectResponse
     {
         $data = $this->validated($request);
-        DB::transaction(function () use ($data, $item): void {
+        DB::transaction(function () use ($data, $item, $request): void {
             McuCategory::whereIn('id', array_unique([$item->mcu_category_id, $data['mcu_category_id']]))->orderBy('id')->lockForUpdate()->get();
             $this->assertSubcategory($data);
             $primary = $data['questions'][0];
+            if ($item->category->isPhysical() && in_array($item->legacy_key, ['tinggi_badan', 'berat_badan'], true) && ($primary['input_type'] !== 'number' || $primary['lab_config'] !== null)) {
+                throw ValidationException::withMessages([$request->has('questions') ? 'questions.0.input_type' : 'input_type' => 'Tinggi dan berat badan untuk BMI harus tetap berupa isian angka tanpa mapping laboratorium.']);
+            }
             $primary['mcu_category_id'] = $data['mcu_category_id'];
             $primary['mcu_subcategory_id'] = $data['mcu_subcategory_id'] ?? null;
             $item->update($primary);
@@ -110,6 +113,7 @@ class McuItemController extends Controller
                 $prefix.'label' => ['required', 'string', 'max:255'], $prefix.'input_type' => ['required', Rule::in(array_keys(McuItem::inputTypes()))],
                 $prefix.'yes_report' => ['exclude_unless:'.$prefix.'input_type,radio', 'required', 'string', 'max:2000'],
                 $prefix.'no_report' => ['exclude_unless:'.$prefix.'input_type,radio', 'required', 'string', 'max:2000'],
+                $prefix.'default_answer' => ['exclude_unless:'.$prefix.'input_type,radio', 'nullable', Rule::in(['YA', 'TIDAK'])],
                 $prefix.'help_text' => ['nullable', 'string', 'max:2000'], $prefix.'is_required' => ['required', 'boolean'],
                 $prefix.'is_active' => ['required', 'boolean'], $prefix.'sort_order' => ['sometimes', 'integer', 'min:0', 'max:9999'],
                 $prefix.'allow_attachment' => ['sometimes', 'boolean'],
@@ -132,6 +136,7 @@ class McuItemController extends Controller
         $validated = $request->validate($rules);
         $questions = $request->has('questions') ? $validated['questions'] : [$validated];
         foreach ($questions as $index => &$question) {
+            $question['default_answer'] = $question['input_type'] === 'radio' ? ($question['default_answer'] ?? null) : null;
             $question['allow_attachment'] = in_array($question['input_type'], ['text', 'number'], true) && (bool) ($question['allow_attachment'] ?? false);
             if ($question['input_type'] !== 'radio') {
                 $question['yes_report'] = $question['no_report'] = null;

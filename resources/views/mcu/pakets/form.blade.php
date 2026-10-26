@@ -33,7 +33,7 @@
         <section class="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-sm">
             <div class="grid gap-3 border-b border-slate-100 px-6 py-5">
                 <h3 class="font-bold text-slate-900">Cakupan pemeriksaan</h3>
-                <p class="text-sm text-slate-500">Pilih item yang sudah dipetakan di master. Anamnesa dan BMI tetap existing. Mapping disalin ke paket saat disimpan.</p><a href="{{ route('mcu-category.index') }}" class="text-sm font-semibold text-[#00008B]">Kelola kategori & mapping →</a><button type="button" data-package-full class="justify-self-start rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-[#00008B]">Pilih semua pemeriksaan</button>
+                <p class="text-sm text-slate-500">Pilih item dari master, termasuk Anamnesis. Mapping disalin ke paket saat disimpan; BMI tetap dihitung otomatis.</p><a href="{{ route('mcu-category.index') }}" class="text-sm font-semibold text-[#00008B]">Kelola kategori & mapping →</a><button type="button" data-package-full class="justify-self-start rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-[#00008B]">Pilih semua pemeriksaan</button>
                 <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                     <label for="package-search" class="grid min-w-0 gap-2 text-sm font-semibold text-slate-700">Cari pemeriksaan<input id="package-search" data-package-search type="search" autocomplete="off" enterkeyhint="search" placeholder="Nama item, kategori, atau subkategori…" aria-describedby="package-search-help package-search-status" class="min-h-12 w-full rounded-xl border border-slate-200 px-4 text-base outline-none focus:border-[#00008B] focus:ring-4 focus:ring-blue-100"></label>
                     <button type="button" data-package-search-clear hidden class="min-h-12 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-600">Hapus pencarian</button>
@@ -75,13 +75,13 @@
                 @endforeach
             </div>
             <div class="border-t border-slate-100 px-6 py-4">
-                <h4 class="font-bold">Anamnesa & pengukuran existing</h4>
+                <h4 class="font-bold">Pengukuran & item paket lama</h4>
                 <p class="mt-1 text-xs text-slate-500">Perhitungan BMI tetap otomatis menyertakan tinggi dan berat badan. Item lama hanya ditampilkan jika sudah dipilih dalam paket yang sedang diedit; tidak ditawarkan kembali pada paket baru.</p>
             </div>
             <div class="grid gap-4 p-5 xl:grid-cols-2">
                 @foreach($catalog as $group => $items)
                 @php
-                $items = array_filter($items, fn ($label, $key) => in_array($group, ['anamnesa_riwayat', 'antropometri_vital'], true) || ($paket->exists && $paket->isItemActive($key) && !$categories->pluck('items')->flatten(1)->contains(fn ($item) => $item->legacy_key === $key && $item->input_type === 'existing')), ARRAY_FILTER_USE_BOTH);
+                $items = array_filter($items, fn ($label, $key) => $key === 'bmi' || ($paket->exists && $paket->isItemActive($key) && !$categories->pluck('items')->flatten(1)->contains(fn ($item) => $item->legacy_key === $key && $item->input_type === 'existing')), ARRAY_FILTER_USE_BOTH);
                 @endphp
                 @if($items === []) @continue @endif
                 @php $selectedItems = old('items', array_keys(array_filter($paket->active_items ?? []))); @endphp

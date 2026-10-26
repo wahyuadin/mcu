@@ -64,7 +64,7 @@ class McuReportLayoutTest extends TestCase
         $text = str_repeat('Catatan pemeriksaan panjang. ', 60).'<script>alert(1)</script>';
         $participant->anamnesa()->create(['rencana_kunjungan_id' => $participant->rencana_kunjungan_id, 'revisions' => [['reason' => 'Koreksi', 'at' => now()->toIso8601String(), 'snapshot' => ['package_items' => [], 'dynamic_schema' => $schema, 'dynamic_answers' => [$item->id => $text]]]]]);
         $this->actingAs(User::factory()->create(['role' => 'admin']))->get(route('pemeriksaan.laporan-riwayat.version', [$participant->rencanaKunjungan, $participant, 1]))
-            ->assertOk()->assertSee('HASIL PEMERIKSAAN EKG')->assertSee($text)->assertDontSee('<script>alert(1)</script>', false)->assertDontSee('ANAMNESA PASIEN');
+            ->assertOk()->assertSee($item->category->name)->assertSee($text)->assertDontSee('<script>alert(1)</script>', false)->assertDontSee('ANAMNESA PASIEN');
     }
 
     public function test_guest_and_mismatched_visit_cannot_access_report(): void

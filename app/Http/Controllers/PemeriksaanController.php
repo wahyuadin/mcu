@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\ExaminationLabel;
 use App\McuCatalog;
+use App\McuCategoryPresentation;
 use App\McuReport;
 use App\MedicalImage;
 use App\Models\Anamnesa;
 use App\Models\Dokter;
 use App\Models\Karyawan;
+use App\Models\McuItem;
 use App\Models\Paket;
 use App\Models\RencanaKunjungan;
 use App\ParticipantAnamnesaForm;
@@ -43,7 +45,7 @@ class PemeriksaanController extends Controller
         $dashboardContext = $this->dashboardContext($request, $peserta);
         $labelService = new ExaminationLabel;
         $labelTarget = $labelService->navigationTarget($peserta, $exam, $request->query('tab'), $request->query('subcategory'));
-        $readonly = $hrdReadonly || $kunjungan->is_closing || $peserta->is_closing || $exam->status === 'final' || in_array($peserta->status_pemeriksaan, ['batal', 'tidak_hadir'], true);
+        $readonly = ! $request->user()->can('examine-mcu') || $kunjungan->is_closing || $peserta->is_closing || $exam->status === 'final' || in_array($peserta->status_pemeriksaan, ['batal', 'tidak_hadir'], true);
         if (! $readonly && (! $peserta->hasStoredPhoto() || $request->query('tab') === 'foto')) {
             return view('mcu.pemeriksaan-foto', ['kunjungan' => $kunjungan, 'peserta' => $peserta, 'hasPhoto' => $peserta->hasStoredPhoto(), 'labelTarget' => $labelTarget]);
         }
@@ -60,6 +62,9 @@ class PemeriksaanController extends Controller
             }
         }
         $tabs = array_merge(array_slice($tabs, 0, -2, true), array_map(fn (array $group): string => $group['name'], $categoryGroups), array_slice($tabs, -2, null, true));
+        $presentation = app(McuCategoryPresentation::class);
+        $clinicalTabs = array_diff_key($tabs, array_flip(['ringkasan', 'identitas', 'kesimpulan', 'review']));
+        $tabs = ['ringkasan' => 'Ringkasan', 'identitas' => 'Identitas MCU'] + $presentation->arrange($clinicalTabs) + ['kesimpulan' => 'Kesimpulan', 'review' => 'Review'];
         $tab = $request->query('tab', 'ringkasan');
         $examinations = ['identitas' => [
             'label' => 'Identitas MCU', 'description' => 'Data pasien, foto, QR identitas & kartu checkpoint',
@@ -68,8 +73,14 @@ class PemeriksaanController extends Controller
         foreach (['fisik' => collect(McuCatalog::physical())->collapse()->all(), 'anamnesa' => Paket::getDefaultItemCatalog()['anamnesa_riwayat'], 'laboratorium' => collect(McuCatalog::laboratory())->collapse()->all()] as $key => $items) {
             if ($progress[$key]['included']) {
                 $count = count(array_filter(array_keys($items), fn (string $item): bool => $exam->includes($peserta, $item)));
+                if ($key === 'anamnesa') {
+                    $count += collect($exam->anamnesisGroups($peserta))->sum(fn (array $group): int => count($group['items']));
+                }
+                if ($key === 'fisik') {
+                    $count += collect($exam->physicalMasterGroups($peserta))->sum(fn (array $group): int => count($group['items']));
+                }
                 $examinations[$key] = [
-                    'label' => $key === 'anamnesa' ? 'Anamnesis' : $progress[$key]['label'],
+                    'label' => $progress[$key]['label'],
                     'description' => $count.' '.match ($key) {
                         'fisik' => 'item pemeriksaan', 'anamnesa' => 'item riwayat & kebiasaan', default => 'parameter pemeriksaan',
                     },
@@ -88,13 +99,23 @@ class PemeriksaanController extends Controller
             $examinations[$key] = ['label' => $group['name'], 'description' => count($group['items']).' item pemeriksaan', 'status' => $progress[$key]['status'], 'tab' => $key, 'anchor' => null, 'skipped' => false];
         }
 
-        $labelCategories = $tab === 'identitas' && ! $hrdReadonly ? $labelService->categories($peserta, $exam) : [];
+        $labelCategories = $tab === 'identitas' && $request->user()->can('examine-mcu') ? $labelService->categories($peserta, $exam) : [];
+        $examinations = ['identitas' => $examinations['identitas']] + $presentation->arrange(array_diff_key($examinations, ['identitas' => true]));
+        $tab = is_string($tab) && array_key_exists($tab, $tabs) ? $tab : 'ringkasan';
+        $importCategory = null;
+        if ($request->user()->can('import-category-results') && ! $kunjungan->is_closing && $kunjungan->status !== 'completed'
+            && ($progress[$tab]['included'] ?? false) && ! in_array($tab, ['ringkasan', 'identitas', 'kesimpulan', 'review'], true)) {
+            $candidate = $presentation->category($tab);
+            if ($candidate?->is_active && $candidate->import_enabled) {
+                $importCategory = $candidate;
+            }
+        }
 
         return response()->view('mcu.pemeriksaan', [
             'kunjungan' => $kunjungan, 'peserta' => $peserta, 'exam' => $exam, 'tabs' => $tabs,
-            'categoryGroups' => $categoryGroups,
+            'categoryGroups' => $categoryGroups, 'importCategory' => $importCategory,
             'reviewSubmission' => $request->boolean('review_submission') && $tab === 'anamnesa' && ! $readonly && $peserta->anamnesa_submission && ! ($peserta->anamnesa_submission['reviewed_at'] ?? null),
-            'tab' => is_string($tab) && array_key_exists($tab, $tabs) ? $tab : 'ringkasan',
+            'tab' => $tab,
             'progress' => $progress, 'finalizationErrors' => $exam->finalizationErrors($peserta),
             'examinations' => $examinations, 'completedExaminations' => $completion['completed'],
             'completionPercent' => $completion['percent'],
@@ -109,7 +130,7 @@ class PemeriksaanController extends Controller
             'readonly' => $readonly,
             'hrdReadonly' => $hrdReadonly, 'dashboardContext' => $dashboardContext,
             'dashboardReturnUrl' => route('dashboard', Arr::except($dashboardContext, ['from_dashboard'])).'#hrd-participants',
-            'checkpoint' => $tab === 'identitas' && ! $hrdReadonly ? $this->checkpointData($kunjungan, $peserta, $exam) : null,
+            'checkpoint' => $tab === 'identitas' && $request->user()->can('examine-mcu') ? $this->checkpointData($kunjungan, $peserta, $exam) : null,
             'labelCategories' => $labelCategories,
             'labelBarcodes' => $tab === 'identitas' ? $labelService->barcodes($peserta, $labelCategories) : null,
         ])->header('Cache-Control', 'private, no-store');
@@ -208,7 +229,7 @@ class PemeriksaanController extends Controller
             'section' => ['sometimes', Rule::in(['identitas', 'anamnesa', 'fisik', 'laboratorium', 'penunjang', 'dinamis', 'kesimpulan', ...array_keys($exam->categoryGroups($peserta))])],
             'status' => ['required', Rule::in(['draft', 'selesai', 'final'])],
             'lock_version' => [Rule::requiredIf($request->filled('section')), 'integer', 'min:0'],
-            'dynamic_files' => in_array($request->input('section'), ['dinamis', 'laboratorium', ...array_keys($exam->categoryGroups($peserta))], true) ? ['sometimes', 'array'] : ['prohibited'],
+            'dynamic_files' => in_array($request->input('section'), ['anamnesa', 'fisik', 'dinamis', 'laboratorium', ...array_keys($exam->categoryGroups($peserta))], true) ? ['sometimes', 'array'] : ['prohibited'],
             'category_doctors' => array_key_exists($request->input('section', ''), $exam->categoryGroups($peserta)) ? ['sometimes', 'array'] : ['prohibited'],
         ]);
         $section = $request->input('section');
@@ -242,7 +263,9 @@ class PemeriksaanController extends Controller
                         $peserta->save();
                     }
                     $this->saveHistory($request, $peserta, $exam);
+                    $this->saveDynamic($request, $peserta, $exam, 'anamnesa', $storedAttachments);
                 } elseif ($section === 'fisik') {
+                    $this->saveDynamic($request, $peserta, $exam, 'fisik', $storedAttachments);
                     $this->savePhysical($request, $peserta, $exam);
                 } elseif ($section === 'laboratorium') {
                     $this->saveLaboratory($request, $peserta, $exam, $storedAttachments);
@@ -406,6 +429,13 @@ class PemeriksaanController extends Controller
             }
         }
         $data = $request->validate($rules);
+        $data['anamnesa'] ??= [];
+        foreach ($data['anamnesa'] as $key => &$answer) {
+            if ((collect(McuCatalog::anamnesa())->collapse()[$key]['type'] ?? null) === 'choice' && ($answer['answer'] ?? null) !== 'Ya') {
+                $answer['note'] = null;
+            }
+        }
+        unset($answer);
         $exam->anamnesa_data = array_replace($exam->anamnesa_data ?? [], $data['anamnesa'] ?? []);
     }
 
@@ -423,6 +453,10 @@ class PemeriksaanController extends Controller
         }
         $definitions = collect($groups)->pluck('items')->flatten(1)->filter(fn (array $item): bool => $item['type'] !== 'label')->keyBy('id');
         $rules = ['dynamic_answers' => $definitions->isEmpty() ? ['sometimes', 'array', 'size:0'] : ['sometimes', 'array:'.implode(',', $definitions->keys()->all())]];
+        $rules['dynamic_notes'] = $definitions->isEmpty() ? ['sometimes', 'array', 'size:0'] : ['sometimes', 'array:'.implode(',', $definitions->keys()->all())];
+        foreach ($definitions as $id => $item) {
+            $rules['dynamic_notes.'.$id] = ['nullable', 'string', 'max:2000'];
+        }
         $doctorCategories = collect($groups)->filter(fn (array $group): bool => $group['has_responsible_doctor'] ?? true)->keyBy('id');
         $rules['category_doctors'] = $doctorCategories->isEmpty() ? ['prohibited'] : ['sometimes', 'array:'.implode(',', $doctorCategories->keys()->all())];
         foreach ($doctorCategories as $id => $group) {
@@ -439,15 +473,17 @@ class PemeriksaanController extends Controller
             }
         }
         foreach ($definitions as $id => $item) {
-            $rules['dynamic_answers.'.$id] = match ($item['type']) {
-                'radio' => ['nullable', Rule::in(['YA', 'TIDAK'])],
-                'number' => ['nullable', 'numeric', 'between:-999999999,999999999'],
-                'laboratory' => ($item['lab_config']['result_type'] ?? 'text') === 'number' ? ['nullable', 'numeric', 'between:-999999999,999999999'] : ['nullable', 'string', 'max:2000'],
-                default => ['nullable', 'string', 'max:2000'],
-            };
+            $rules['dynamic_answers.'.$id] = McuItem::answerRules($item);
         }
         $data = $request->validate($rules);
         $exam->dynamic_answers = array_replace($exam->dynamic_answers ?? [], $data['dynamic_answers'] ?? []);
+        $notes = array_replace($exam->dynamic_notes ?? [], $data['dynamic_notes'] ?? []);
+        foreach ($definitions as $id => $item) {
+            if ($item['type'] === 'radio' && (($exam->dynamic_answers ?? [])[$id] ?? null) !== 'YA') {
+                $notes[$id] = null;
+            }
+        }
+        $exam->dynamic_notes = $notes;
         $exam->category_doctors = array_replace($exam->category_doctors ?? [], $data['category_doctors'] ?? []);
         $attachments = $exam->dynamic_attachments ?? [];
         foreach ($uploadable as $id => $item) {
@@ -491,8 +527,10 @@ class PemeriksaanController extends Controller
             }
         }
         $exam->fill($request->validate($rules));
-        if ($exam->includes($participant, 'bmi')) {
-            $calculation = Anamnesa::calculateBmi($exam->tinggi_badan === null ? null : (float) $exam->tinggi_badan, $exam->berat_badan === null ? null : (float) $exam->berat_badan);
+        if ($exam->includes($participant, 'bmi') || $exam->physicalMasterGroups($participant) !== []) {
+            $height = $exam->physicalMeasurement($participant, 'tinggi_badan');
+            $weight = $exam->physicalMeasurement($participant, 'berat_badan');
+            $calculation = Anamnesa::calculateBmi($height === null ? null : (float) $height, $weight === null ? null : (float) $weight);
             $exam->fill(['bmi' => $calculation['bmi'], 'kategori_bmi' => $calculation['kategori']]);
         }
     }

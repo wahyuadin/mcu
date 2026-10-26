@@ -130,7 +130,7 @@ class CategoryExaminationTabsTest extends TestCase
         $lab->category->update(['name' => 'Nama baru', 'sort_order' => 99]);
         $participant->paket->update(['dynamic_schema' => []]);
 
-        $this->get(route('pemeriksaan.edit', [$participant->rencanaKunjungan, $participant, 'tab' => $key]))->assertOk()->assertSee('RIWAYAT PASIEN')->assertSee('HASIL LABORATORIUM')->assertDontSee('Nama baru')->assertSee('aria-label="Selesai"', false);
+        $this->get(route('pemeriksaan.edit', [$participant->rencanaKunjungan, $participant, 'tab' => $key]))->assertOk()->assertSee('RIWAYAT PASIEN')->assertSee('Nama baru')->assertSee('aria-label="Selesai"', false);
         $this->assertSame($schema, $participant->fresh()->anamnesa->dynamic_schema);
         $this->get(route('pemeriksaan.checkpoint', [$participant->rencanaKunjungan, $participant]))->assertOk()->assertSee('RIWAYAT PASIEN')->assertSee('HASIL LABORATORIUM');
     }

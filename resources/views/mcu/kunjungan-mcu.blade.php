@@ -93,10 +93,10 @@
                                 <div class="h-full rounded-full bg-[#00008B]" style="width: {{ $progress }}%"></div>
                             </div>
                         </div>
-                        <div class="mt-5 flex flex-wrap items-stretch gap-2"><a data-visit-action
+                        <div class="mt-5 flex flex-wrap items-stretch gap-2">@can('view-visits')<a data-visit-action
                                 href="{{ route('kunjungan-mcu.show', $kunjungan) }}"
                                 class="inline-flex min-h-11 min-w-0 flex-1 cursor-pointer items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-center text-xs font-bold text-white hover:bg-[#00008B]">Buka
-                                peserta & hasil →</a>
+                                peserta & hasil →</a>@endcan
                             @can('examine-mcu')
                                 <form data-barcode-form method="POST" action="{{ route('anamnesa.barcode', $kunjungan) }}"
                                     class="flex shrink-0">@csrf<button type="submit" data-visit-action aria-haspopup="dialog"

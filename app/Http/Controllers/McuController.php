@@ -27,8 +27,11 @@ use Throwable;
 
 class McuController extends Controller
 {
-    public function index(Request $request, DashboardWorkspace $workspace, DashboardLibrary $library): View
+    public function index(Request $request, DashboardWorkspace $workspace, DashboardLibrary $library): View|RedirectResponse
     {
+        if ($request->user()->role === 'dokter') {
+            return redirect()->route('kunjungan-mcu.index');
+        }
         $company = $workspace->company($request, allowLegacyReadOnly: true);
         $data = $workspace->operationalData($request, $company);
 

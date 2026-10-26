@@ -72,9 +72,11 @@ class McuReport
             $sections[] = ['title' => 'HASIL PEMERIKSAAN '.mb_strtoupper($definition['label']), 'kind' => 'detail', 'groups' => [['name' => null, 'rows' => $rows]], 'doctor_id' => $data['doctor_id'] ?? null, 'attachments' => $attachments];
         }
 
-        foreach ($exam->categoryGroups($participant) as $category) {
-            $title = in_array(mb_strtoupper($category['name']), ['LAB', 'LABORATORIUM', 'HASIL PEMERIKSAAN LABORATORIUM'], true)
-                ? 'HASIL PEMERIKSAAN LABORATORIUM' : $category['name'];
+        foreach ([...$exam->categoryGroups($participant), ...$exam->anamnesisGroups($participant), ...$exam->physicalMasterGroups($participant)] as $category) {
+            $isAnamnesis = $exam->groupSection($category) === 'anamnesa';
+            $isPhysical = $exam->groupSection($category) === 'fisik';
+            $title = $isPhysical ? 'HASIL PEMERIKSAAN FISIK' : ($isAnamnesis ? 'ANAMNESA PASIEN' : (in_array(mb_strtoupper($category['name']), ['LAB', 'LABORATORIUM', 'HASIL PEMERIKSAAN LABORATORIUM'], true)
+                ? 'HASIL PEMERIKSAAN LABORATORIUM' : $category['name']));
             $isColumns = in_array(mb_strtoupper($title), ['HASIL PEMERIKSAAN FISIK', 'ANAMNESA PASIEN'], true);
             $groups = [];
             $attachments = [];
@@ -110,9 +112,22 @@ class McuReport
                 }
                 $groups = $columns;
             }
-            $sections[] = ['title' => $title, 'kind' => $isColumns ? 'columns' : ($hasLaboratory ? 'laboratory' : 'detail'), 'groups' => $groups,
-                'doctor_id' => ($category['has_responsible_doctor'] ?? true) ? (($exam->category_doctors ?? [])[$category['id']] ?? null) : null,
-                'show_doctor' => $category['has_responsible_doctor'] ?? true, 'attachments' => $attachments];
+            if ($isPhysical && ! $exam->includes($participant, 'bmi') && $exam->bmi !== null) {
+                $groups[] = ['name' => 'BMI (otomatis)', 'column' => 0, 'rows' => [['key' => 'bmi', 'number' => null, 'label' => 'BMI & kategori', 'value' => $exam->bmi.' · '.$exam->kategori_bmi]]];
+            }
+            if ($isAnamnesis || $isPhysical) {
+                $existingHistory = array_search($title, array_column($sections, 'title'), true);
+                if ($existingHistory !== false) {
+                    $sections[$existingHistory]['groups'] = [...$sections[$existingHistory]['groups'], ...$groups];
+                    $sections[$existingHistory]['attachments'] = [...$sections[$existingHistory]['attachments'], ...$attachments];
+                    $sections[$existingHistory]['category_id'] = $category['id'];
+
+                    continue;
+                }
+            }
+            $sections[] = ['title' => $title, 'category_id' => $category['id'], 'kind' => $isColumns ? 'columns' : ($hasLaboratory ? 'laboratory' : 'detail'), 'groups' => $groups,
+                'doctor_id' => $isPhysical ? $exam->dokter_fisik_id : (($category['has_responsible_doctor'] ?? true) ? (($exam->category_doctors ?? [])[$category['id']] ?? null) : null),
+                'show_doctor' => $isPhysical || ($category['has_responsible_doctor'] ?? true), 'attachments' => $attachments];
         }
 
         foreach ($sections as &$section) {
@@ -120,8 +135,24 @@ class McuReport
                 $section['groups'] = $this->laboratoryPages($section['groups']);
             }
         }
+        unset($section);
+        $presentation = app(McuCategoryPresentation::class);
+        $ordered = [];
+        foreach ($sections as $index => $section) {
+            $key = match ($section['title']) {
+                'HASIL PEMERIKSAAN FISIK' => 'fisik',
+                'ANAMNESA PASIEN' => 'anamnesa',
+                'HASIL PEMERIKSAAN LABORATORIUM' => 'laboratorium',
+                default => null,
+            };
+            $master = isset($section['category_id']) ? $presentation->categories()->firstWhere('id', $section['category_id'])
+                : ($key ? $presentation->category($key) : $presentation->categories()->firstWhere('name', $section['title']));
+            $section['title'] = $master?->name ?? $section['title'];
+            $rank = $master ? $presentation->categories()->search(fn ($category): bool => $category->id === $master->id) : false;
+            $ordered[] = ['order' => $rank === false ? 100000 + $index : $rank, 'section' => $section];
+        }
 
-        return $sections;
+        return collect($ordered)->sortBy('order')->pluck('section')->values()->all();
     }
 
     /**

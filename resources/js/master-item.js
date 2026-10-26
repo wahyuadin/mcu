@@ -146,6 +146,7 @@ export function setupFormBuilder(form, root = document) {
                     const radio = root.createElement('input');
                     radio.type = 'radio';
                     radio.disabled = true;
+                    radio.checked = values.default_answer === answer;
                     const text = root.createElement('span');
                     text.textContent = answer;
                     label.append(radio, text);

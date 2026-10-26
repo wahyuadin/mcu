@@ -152,7 +152,12 @@ class UserManagementTest extends TestCase
             foreach ($requests as [$method, $url]) {
                 $this->call($method, $url)->assertForbidden();
             }
-            $this->get(route('dashboard'))->assertOk()->assertDontSee(route('users.index'));
+            $response = $this->get(route('dashboard'));
+            if ($role === 'dokter') {
+                $response->assertRedirect(route('kunjungan-mcu.index'));
+            } else {
+                $response->assertOk()->assertDontSee(route('users.index'));
+            }
         }
         $this->assertNotSoftDeleted($user);
     }
@@ -262,17 +267,17 @@ class UserManagementTest extends TestCase
         $this->assertSame(1, User::count());
     }
 
-    public function test_supported_roles_include_hrd_and_doctor_role_is_rejected(): void
+    public function test_supported_roles_include_hrd_and_doctor_without_allowing_the_last_admin_to_change_role(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
         $this->actingAs($admin);
 
-        $this->get(route('users.index'))->assertOk()->assertViewHas('roles', ['admin' => 'Admin', 'petugas' => 'Petugas', 'hrd' => 'HRD'])
-            ->assertDontSee('<option value="dokter"', false);
-        $this->post(route('users.store'), ['name' => 'User Baru', 'email' => 'baru@example.test', 'role' => 'dokter', 'password' => 'PasswordBaru123', 'password_confirmation' => 'PasswordBaru123'])->assertSessionHasErrors('role');
+        $this->get(route('users.index'))->assertOk()->assertViewHas('roles', ['admin' => 'Master Admin', 'dokter' => 'Dokter', 'petugas' => 'Petugas', 'hrd' => 'HRD'])
+            ->assertSee('<option value="dokter"', false);
+        $this->post(route('users.store'), ['name' => 'User Baru', 'email' => 'baru@example.test', 'role' => 'dokter', 'password' => 'PasswordBaru123', 'password_confirmation' => 'PasswordBaru123'])->assertSessionHasNoErrors();
         $this->put(route('users.update', $admin), ['name' => $admin->name, 'email' => $admin->email, 'role' => 'dokter'])->assertSessionHasErrors('role');
 
-        $this->assertSame(1, User::count());
+        $this->assertSame(2, User::count());
         $this->assertSame('admin', $admin->fresh()->role);
     }
 }

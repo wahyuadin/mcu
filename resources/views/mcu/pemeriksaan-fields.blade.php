@@ -1,7 +1,7 @@
 @if($tab === 'identitas')
     <section class="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6">
         <div class="flex flex-wrap items-center justify-between gap-4"><h3 class="text-lg font-bold">Identitas episode MCU</h3>
-            @if(!$hrdReadonly)<details data-print-dropdown class="relative">
+            @if(auth()->user()->can('examine-mcu'))<details data-print-dropdown class="relative">
                 <summary class="cursor-pointer list-none rounded-xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white">Cetak ▾</summary>
                 <div class="absolute right-0 z-20 mt-2 grid w-48 gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
                     <button type="button" data-checkpoint-print data-print-url="{{ route('pemeriksaan.checkpoint', [$kunjungan, $peserta]) }}" class="rounded-lg px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50">Cetak PDF</button>
@@ -19,13 +19,13 @@
                     <div class="min-w-0"><dt class="text-slate-500">{{ $label }}</dt><dd class="mt-2 break-words font-semibold">{{ $value ?: 'Belum diisi' }}</dd></div>
                 @endforeach
             </dl>
-            @if(!$hrdReadonly)<figure class="flex shrink-0 flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white p-4 lg:w-44"><img src="{{ $checkpoint['qrDataUri'] }}" alt="QR menuju pemeriksaan pasien" class="h-36 w-36"><figcaption class="text-center text-xs font-semibold text-slate-500">Scan untuk pemeriksaan</figcaption></figure>@endif
+            @if(auth()->user()->can('examine-mcu'))<figure class="flex shrink-0 flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white p-4 lg:w-44"><img src="{{ $checkpoint['qrDataUri'] }}" alt="QR menuju pemeriksaan pasien" class="h-36 w-36"><figcaption class="text-center text-xs font-semibold text-slate-500">Scan untuk pemeriksaan</figcaption></figure>@endif
         </div>
         @if(!$readonly)<div class="flex flex-wrap gap-3 border-t border-slate-200 pt-5">
             <button type="button" data-photo-modal-open aria-haspopup="dialog" aria-controls="patient-photo-modal" class="rounded-xl bg-blue-900 px-5 py-3 text-sm font-semibold text-white">Edit identitas pasien</button>
         </div>@endif
     </section>
-    @if(!$hrdReadonly) @include('mcu.label-modal') @endif
+    @if(auth()->user()->can('examine-mcu')) @include('mcu.label-modal') @endif
     @if(!$readonly)
         <dialog id="patient-photo-modal" data-photo-modal @if($errors->has('foto_pasien') || (old('identity_modal') && $errors->any())) data-photo-modal-errors @endif aria-labelledby="patient-photo-modal-title" class="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-5xl overflow-y-auto rounded-2xl border-0 bg-slate-50 p-0 text-slate-900 shadow-xl">
             <div class="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-slate-200 bg-white p-5"><div><h2 id="patient-photo-modal-title" class="text-lg font-bold">Edit identitas pasien</h2><p class="mt-1 text-sm text-slate-500">{{ $peserta->nama_karyawan }}</p></div><button type="button" data-photo-modal-close autofocus aria-label="Tutup modal identitas" class="rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold">Tutup</button></div>
@@ -48,12 +48,17 @@
             @foreach($activeItems as $key => $item)
                 @php($history = $exam->historyValue($key))
                 @if($reviewSubmission) @php($history = $peserta->anamnesa_submission['answers'][$key] ?? ['answer' => null, 'note' => null]) @endif
-                <div class="grid gap-4 border-t border-slate-100 pt-4 sm:grid-cols-2">
+                <div @if($item['type'] === 'choice') data-conditional-answer @endif class="grid gap-4 border-t border-slate-100 pt-4 sm:grid-cols-2">
                     @include('mcu.field', ['field' => 'anamnesa.'.$key.'.answer', 'label' => $item['label'], 'type' => $item['type'] === 'choice' ? 'select' : 'textarea', 'value' => $history['answer'], 'options' => ['Ya' => 'Ya', 'Tidak' => 'Tidak']])
-                    @include('mcu.field', ['field' => 'anamnesa.'.$key.'.note', 'label' => 'Keterangan / sejak kapan / rincian', 'type' => 'textarea', 'value' => $history['note']])
+                    <fieldset @if($item['type'] === 'choice') data-conditional-note @if(old('anamnesa.'.$key.'.answer', $history['answer']) !== 'Ya') hidden disabled @endif @endif>
+                        @include('mcu.field', ['field' => 'anamnesa.'.$key.'.note', 'label' => 'Keterangan / sejak kapan (opsional)', 'type' => 'textarea', 'value' => $history['note']])
+                    </fieldset>
                 </div>
             @endforeach
         </section>@endif
+    @endforeach
+    @foreach($exam->anamnesisGroups($peserta) as $group)
+        @include('mcu.dynamic-examination-group')
     @endforeach
 @elseif($tab === 'fisik')
     @if($progress['fisik']['included'])
@@ -72,6 +77,12 @@
             @endforeach
         </div><p class="text-xs text-slate-500">Untuk temuan teks yang tidak diperiksa, tulis “Tidak diperiksa — alasan”. Tekanan darah: sistolik/diastolik, misalnya 138/88.</p></section>@endif
     @endforeach
+    @foreach($exam->physicalMasterGroups($peserta) as $group)
+        @include('mcu.dynamic-examination-group')
+    @endforeach
+    @if($exam->physicalMasterGroups($peserta) !== [] && !$exam->includes($peserta, 'bmi'))
+        <section class="rounded-xl bg-blue-50 p-4 text-sm"><strong>BMI & kategori (otomatis)</strong><p data-bmi role="status" aria-live="polite" class="mt-2">{{ $exam->bmi !== null ? $exam->bmi.' · '.$exam->kategori_bmi : 'Belum dapat dihitung' }}</p></section>
+    @endif
 @elseif($tab === 'laboratorium')
     <p class="rounded-xl bg-blue-50 p-4 text-sm text-blue-900">Isi nilai rujukan dari laboratorium sumber. Penanda otomatis hanya untuk angka dengan rujukan seperti 3.8–10.6 atau &lt; 200. Untuk hasil kualitatif/rentang hasil, pilih penanda secara manual.</p>
     @foreach($laboratoryGroups as $group => $items)
@@ -113,38 +124,7 @@
         @endif
     @endforeach
 @elseif(isset($categoryGroups[$tab]))
-    @foreach([$categoryGroups[$tab]] as $group)
-        <section data-exam-category="{{ $group['id'] }}" class="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6"><h3 class="text-lg font-bold">{{ $group['name'] }}</h3>
-            @if($group['has_responsible_doctor'] ?? true)
-                @include('mcu.field', ['field' => 'category_doctors.'.$group['id'], 'label' => 'Dokter Pemeriksa (opsional)', 'type' => 'select', 'options' => $doctors->pluck('nama_dokter', 'id'), 'value' => ($exam->category_doctors ?? [])[$group['id']] ?? null])
-            @endif
-            @foreach(\App\LaboratoryResult::sections($group['items']) as $subsection)
-                <div data-exam-subcategory="{{ $subsection['items'][0]['subcategory']['id'] ?? $group['id'] }}" tabindex="-1" class="grid min-w-0 scroll-mt-24 gap-5 rounded-xl p-3">
-                @if($subsection['name'])<h4 class="border-b border-slate-200 pb-3 font-bold">{{ $subsection['name'] }}</h4>@endif
-                @php($labItems = array_values(array_filter($subsection['items'], fn ($item) => $item['type'] === 'laboratory')))
-                @if($labItems) @include('mcu.laboratory-fields', ['items' => $labItems]) @endif
-            @foreach($subsection['items'] as $item)
-                @if($item['type'] === 'laboratory') @continue @endif
-                @php($answer = old('dynamic_answers.'.$item['id'], ($exam->dynamic_answers ?? [])[$item['id']] ?? null))
-                @if($item['type'] === 'label')
-                    <div class="rounded-xl bg-blue-50 p-4"><h4 class="font-semibold">{{ $item['label'] }}</h4><p class="mt-2 whitespace-pre-line text-sm text-blue-900">{{ $item['help_text'] }}</p></div>
-                @elseif($item['type'] === 'radio')
-                    <fieldset class="grid gap-3 border-t border-slate-100 pt-4"><legend class="text-sm font-semibold">{{ $item['label'] }}{{ $item['required'] ? ' *' : ' (opsional)' }}</legend>
-                        <div class="flex flex-wrap gap-3">@foreach(['YA', 'TIDAK'] as $choice)<label class="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold"><input type="radio" name="dynamic_answers[{{ $item['id'] }}]" value="{{ $choice }}" @checked($answer === $choice) class="h-4 w-4 accent-[#00008B]">{{ $choice }}</label>@endforeach</div>
-                        @if($item['help_text'])<p class="text-xs text-slate-500">{{ $item['help_text'] }}</p>@endif
-                        <p class="text-xs text-slate-500">Hasil laporan tersimpan: {{ $exam->dynamicReportValue($item) }}</p>
-                        @error('dynamic_answers.'.$item['id'])<p class="text-sm text-red-700">{{ $message }}</p>@enderror
-                    </fieldset>
-                @else
-                    @include('mcu.field', ['field' => 'dynamic_answers.'.$item['id'], 'label' => $item['label'].($item['required'] ? ' *' : ' (opsional)'), 'type' => $item['type'] === 'number' ? 'number' : 'textarea', 'step' => 'any', 'value' => ($exam->dynamic_answers ?? [])[$item['id']] ?? null])
-                    @if($item['help_text'])<p class="text-xs text-slate-500">{{ $item['help_text'] }}</p>@endif
-                    @include('mcu.dynamic-attachment-field', ['item' => $item])
-                @endif
-            @endforeach
-                </div>
-            @endforeach
-        </section>
-    @endforeach
+    @include('mcu.dynamic-examination-group', ['group' => $categoryGroups[$tab]])
 @elseif($tab === 'kesimpulan')
     <section class="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6"><h3 class="text-lg font-bold">Kesimpulan MCU</h3><p class="text-sm text-slate-500">Diinput operator berdasarkan hasil dokter. Program tidak menetapkan diagnosis atau kelayakan kerja otomatis.</p>
         <div class="grid gap-5 sm:grid-cols-2">

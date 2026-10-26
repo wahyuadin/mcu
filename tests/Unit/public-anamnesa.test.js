@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 
-const source = readFileSync(new URL('../../resources/js/public-anamnesa.js', import.meta.url), 'utf8').replace(/^export /gm, '');
+const source = readFileSync(new URL('../../resources/js/examination-fields.js', import.meta.url), 'utf8').split("if (typeof document")[0].replace(/^export /gm, '') + readFileSync(new URL('../../resources/js/public-anamnesa.js', import.meta.url), 'utf8').replace(/^import .*;\n/gm, '').replace(/^export /gm, '');
 
 function setup() {
     const controls = [];

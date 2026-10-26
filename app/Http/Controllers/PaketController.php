@@ -128,6 +128,12 @@ class PaketController extends Controller
             'master_items.*' => ['required', 'uuid', 'distinct', Rule::exists('mcu_items', 'id')->where('is_active', true)->whereNot('input_type', 'label')],
         ]);
         $data['items'] ??= [];
+        $legacyMasters = McuItem::with('category', 'subcategory')->whereIn('legacy_key', $data['items'])->get();
+        foreach ($legacyMasters as $legacyMaster) {
+            if ($legacyMaster->category->isProtected() && (! $legacyMaster->category->is_active || ! $legacyMaster->is_active || ($legacyMaster->subcategory && ! $legacyMaster->subcategory->is_active)) && ! ($request->route('paket') instanceof Paket && $request->route('paket')->isItemActive($legacyMaster->legacy_key))) {
+                throw ValidationException::withMessages(['items' => 'Item Anamnesis sudah nonaktif. Pilih item aktif dari master.']);
+            }
+        }
         $data['dynamic_schema'] = [];
         $selected = McuItem::with('category', 'subcategory')->whereIn('id', $data['master_items'] ?? [])->orderBy('sort_order')->orderBy('label')->get();
         foreach ($selected as $item) {
@@ -136,14 +142,30 @@ class PaketController extends Controller
             }
             $categoryId = $item->mcu_category_id;
             $data['dynamic_schema'][$categoryId] ??= ['id' => $categoryId, 'name' => $item->category->name, 'order' => $item->category->sort_order, 'has_responsible_doctor' => $item->category->has_responsible_doctor, 'items' => []];
+            if ($item->category->isAnamnesis()) {
+                $data['dynamic_schema'][$categoryId]['section'] = 'anamnesa';
+                $data['dynamic_schema'][$categoryId]['has_responsible_doctor'] = false;
+            }
+            if ($item->category->isPhysical()) {
+                $data['dynamic_schema'][$categoryId]['section'] = 'fisik';
+                $data['dynamic_schema'][$categoryId]['has_responsible_doctor'] = false;
+            }
             $data['dynamic_schema'][$categoryId]['items'][] = $item->definition();
         }
+        $data['items'] = array_values(array_diff($data['items'], $selected->filter(fn (McuItem $item): bool => $item->category->isProtected())->pluck('legacy_key')->filter()->all()));
         $data['dynamic_schema'] = array_values(collect($data['dynamic_schema'])->sortBy('order')->all());
         if ($data['items'] === [] && $data['dynamic_schema'] === []) {
             throw ValidationException::withMessages(['items' => 'Pilih minimal satu item pemeriksaan.']);
         }
         if (in_array('bmi', $data['items'], true)) {
-            $data['items'] = array_values(array_unique([...$data['items'], 'tinggi_badan', 'berat_badan']));
+            $dependencies = array_diff(['tinggi_badan', 'berat_badan'], $selected->filter(fn (McuItem $item): bool => $item->category->isPhysical())->pluck('legacy_key')->all());
+            foreach (McuItem::with('category', 'subcategory')->whereHas('category', fn ($query) => $query->where('legacy_group', 'pemeriksaan_fisik'))->whereIn('legacy_key', $dependencies)->get() as $dependency) {
+                $retained = $request->route('paket') instanceof Paket && $request->route('paket')->isItemActive($dependency->legacy_key);
+                if (! $retained && (! $dependency->category->is_active || ! $dependency->is_active || ($dependency->subcategory && ! $dependency->subcategory->is_active))) {
+                    throw ValidationException::withMessages(['items' => 'BMI memerlukan item tinggi dan berat badan yang aktif.']);
+                }
+            }
+            $data['items'] = array_values(array_unique([...$data['items'], ...$dependencies]));
         }
 
         return $data;

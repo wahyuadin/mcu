@@ -35,7 +35,7 @@ class McuMasterActionsTest extends TestCase
             ->assertSee('Laboratorium khusus')->assertDontSee('Radiologi')
             ->assertViewHas('search', 'Laboratorium')->assertViewHas('categories', fn ($categories): bool => $categories->total() === 31 && str_contains($categories->nextPageUrl(), 'q='));
         $this->get(route('mcu-category.index', ['q' => 'Tidak ditemukan']))->assertOk()->assertSee('Tidak ada kategori yang cocok');
-        $this->get(route('mcu-category.index'))->assertOk()->assertViewHas('categories', fn ($categories): bool => $categories->total() === 32);
+        $this->get(route('mcu-category.index'))->assertOk()->assertViewHas('categories', fn ($categories): bool => $categories->total() === 34);
         $this->get(route('mcu-category.index', ['q' => ['invalid']]))->assertSessionHasErrors('q');
     }
 
@@ -52,7 +52,7 @@ class McuMasterActionsTest extends TestCase
             ->assertViewHas('search', 'Hemoglobin')
             ->assertViewHas('items', fn ($items): bool => $items->total() === 31 && str_contains($items->nextPageUrl(), 'q=') && str_contains($items->nextPageUrl(), 'category='.$category->id));
         $this->get(route('mcu-item.index', ['q' => 'Tidak ditemukan']))->assertOk()->assertSee('Tidak ada item yang cocok');
-        $this->get(route('mcu-item.index'))->assertOk()->assertViewHas('items', fn ($items): bool => $items->total() === 33);
+        $this->get(route('mcu-item.index'))->assertOk()->assertViewHas('items', fn ($items): bool => $items->total() === 111);
         $this->get(route('mcu-item.index', ['q' => ['invalid']]))->assertSessionHasErrors('q');
     }
 

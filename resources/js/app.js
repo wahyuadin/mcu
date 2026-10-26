@@ -17,3 +17,5 @@ import './account-menu';
 import './hrd-dashboard';
 import './dashboard';
 import './examination-navigation';
+import './examination-fields';
+import './category-result-import';

@@ -34,8 +34,8 @@ class McuFormBuilderTest extends TestCase
             $this->question('Keterangan', 'text'), $this->question('Jumlah', 'number'),
         ]])->assertSessionHasNoErrors()->assertRedirect(route('mcu-item.index', ['category' => $category->id]));
         $this->assertSame(['Hepatitis', 'Keterangan', 'Jumlah'], $category->items()->pluck('label')->all());
-        $this->assertDatabaseCount('mcu_items', 3);
-        $this->assertNull(McuItem::where('label', 'Hepatitis')->firstOrFail()->legacy_key);
+        $this->assertSame(3, $category->items()->count());
+        $this->assertNull($category->items()->where('label', 'Hepatitis')->firstOrFail()->legacy_key);
         $this->assertNull(McuItem::where('label', 'Keterangan')->firstOrFail()->no_report);
     }
 
@@ -45,7 +45,7 @@ class McuFormBuilderTest extends TestCase
         $category = McuCategory::factory()->create();
         $payload = ['mcu_category_id' => $category->id, 'questions' => [$this->question('Valid', 'text'), $this->question('Perlu mapping', 'radio')]];
         $this->from(route('mcu-item.create'))->post(route('mcu-item.store'), $payload)->assertSessionHasErrors('questions.1.no_report')->assertSessionHasInput('questions.0.label', 'Valid');
-        $this->assertDatabaseCount('mcu_items', 0);
+        $this->assertSame(0, $category->items()->count());
         $this->get(route('mcu-item.create'))->assertOk()->assertSee('value="Valid"', false)->assertSee('value="Perlu mapping"', false);
     }
 
@@ -71,7 +71,7 @@ class McuFormBuilderTest extends TestCase
         foreach (['label', 'existing'] as $type) {
             $this->post(route('mcu-item.store'), ['mcu_category_id' => $category->id, 'questions' => [$this->question('Ditolak', $type)]])->assertSessionHasErrors('questions.0.input_type');
         }
-        $this->assertDatabaseCount('mcu_items', 0);
+        $this->assertSame(0, $category->items()->count());
     }
 
     /** @return array{label: string, input_type: string, is_required: int, is_active: int} */

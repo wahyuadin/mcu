@@ -32,6 +32,13 @@
     <p class="text-xs text-slate-500">○ Belum diisi · ● Draft · ✓ Selesai. Kosong bukan berarti normal.@if(!$hrdReadonly) Pengisian dapat dilakukan dalam urutan apa pun.@endif</p>
     @endif
 
+    @if($importCategory)
+        <section class="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-indigo-200 bg-indigo-50 p-5">
+            <div><h3 class="font-bold text-indigo-950">Import {{ $importCategory->name }}</h3><p class="mt-1 text-sm text-indigo-900">Untuk seluruh peserta kunjungan ini sesuai paket masing-masing, bukan hanya peserta yang sedang dibuka.</p></div>
+            <button type="button" data-category-import-open data-category-id="{{ $importCategory->id }}" data-categories-url="{{ route('category-import.categories', $kunjungan) }}" data-visit-name="{{ $kunjungan->nomor_kunjungan }} · {{ $importCategory->name }} · Seluruh peserta kunjungan" aria-haspopup="dialog" aria-controls="category-import-modal" class="min-h-11 rounded-xl bg-indigo-800 px-5 py-3 text-sm font-semibold text-white">↑ Import Data</button>
+        </section>
+    @endif
+
     @if($tab === 'ringkasan')
         @include('mcu.pemeriksaan-ringkasan')
     @elseif($tab === 'review')
@@ -65,7 +72,7 @@
         </section>
         @if($exam->status === 'final')
             <section class="grid gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-6"><h3 class="font-bold text-emerald-900">Hasil final — hanya baca</h3><p class="text-sm">Difinalisasi {{ $exam->finalized_at?->format('d/m/Y H:i') ?? '(hasil lama)' }}.@if(!$hrdReadonly) Koreksi harus melalui revisi beralasan.@endif</p>
-                @if(!$hrdReadonly && !$kunjungan->is_closing && !$peserta->is_closing)<form method="POST" action="{{ route('pemeriksaan.revise', [$kunjungan, $peserta]) }}" class="grid gap-3">@csrf
+                @if(auth()->user()->can('examine-mcu') && !$kunjungan->is_closing && !$peserta->is_closing)<form method="POST" action="{{ route('pemeriksaan.revise', [$kunjungan, $peserta]) }}" class="grid gap-3">@csrf
                     @include('mcu.field', ['field' => 'reason', 'label' => 'Alasan revisi (wajib)', 'type' => 'textarea', 'value' => null])
                     <button class="justify-self-start rounded-xl border border-emerald-700 px-5 py-3 font-semibold text-emerald-900">Buka revisi hasil</button>
                 </form>@endif
@@ -100,7 +107,7 @@
                     <div class="flex flex-wrap gap-2"><button name="status" value="draft" class="rounded-xl border border-[#00008B] px-4 py-3 text-sm font-semibold text-[#00008B]">Simpan draft</button>@if($tab !== 'identitas')<button name="status" value="selesai" class="rounded-xl bg-[#00008B] px-4 py-3 text-sm font-semibold text-white">Simpan & tandai selesai</button>@endif</div>
                 </div>
             @else
-                <p class="rounded-xl bg-slate-200 p-4 text-sm">{{ $hrdReadonly ? 'Hanya baca · hasil final yang sudah dirilis.' : 'Hasil dikunci.' }} @if(!$hrdReadonly && $exam->status === 'final' && !$kunjungan->is_closing)Buka tab Review untuk membuat revisi.@endif</p>
+                <p class="rounded-xl bg-slate-200 p-4 text-sm">{{ $hrdReadonly ? 'Hanya baca · hasil final yang sudah dirilis.' : (auth()->user()->can('examine-mcu') ? 'Hasil dikunci.' : 'Hanya baca · gunakan Import Data pada kategori yang diaktifkan.') }} @if(auth()->user()->can('examine-mcu') && $exam->status === 'final' && !$kunjungan->is_closing)Buka tab Review untuk membuat revisi.@endif</p>
             @endif
         @if($hrdReadonly)</div>@else</form>@endif
     @endif
@@ -113,4 +120,5 @@
         </form></details>@endcan
     @endif
 </div>
+@can('import-category-results') @include('mcu.category-import-modal') @endcan
 @endsection

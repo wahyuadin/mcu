@@ -40,11 +40,11 @@
                             </svg></span><span>Dashboard</span></a>
                 </div>
 
-                @can('view-patients')
+                @can('view-visits')
                 <div class="space-y-1.5">
                     <p class="px-3 pb-1 text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-400">
                         Operasional MCU</p>
-                    @can('view-patients')
+                    @can('view-visits')
                         <a data-sidebar-link href="{{ route('kunjungan-mcu.index') }}"
                             class="group flex items-center gap-3 rounded-xl px-3 py-2.5 font-semibold transition-colors {{ request()->routeIs('kunjungan-mcu.*', 'pemeriksaan.edit', 'pemeriksaan.scan') ? 'bg-[#00008B] text-white shadow-lg shadow-blue-900/15' : 'text-slate-600 hover:bg-slate-100 hover:text-[#00008B]' }}"><span
                                 class="flex h-9 w-9 items-center justify-center rounded-lg {{ request()->routeIs('kunjungan-mcu.*', 'pemeriksaan.edit', 'pemeriksaan.scan') ? 'bg-white/15' : 'bg-slate-100 group-hover:bg-blue-50' }}"><svg

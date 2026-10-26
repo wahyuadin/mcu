@@ -169,7 +169,7 @@ class ExaminationLabelTest extends TestCase
         $this->get($url)->assertOk()->assertViewHas('tab', 'kategori-'.$category->id)
             ->assertSee('data-exam-category="'.$category->id.'"', false)
             ->assertSee('data-exam-subcategory="'.$subcategory->id.'"', false)
-            ->assertSee('Hematologi')->assertDontSee('Master renamed');
+            ->assertSee('Hematologi')->assertSee('Master renamed category')->assertDontSee('>Master renamed<', false);
         $this->assertNull($participant->fresh()->anamnesa);
     }
 

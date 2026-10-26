@@ -71,7 +71,8 @@ class DashboardWorkspaceTest extends TestCase
     public function test_legacy_doctor_keeps_the_readonly_summary_without_gaining_dashboard_editor_access(): void
     {
         $doctor = User::factory()->create(['role' => 'dokter']);
-        $this->actingAs($doctor)->get(route('dashboard'))->assertOk()->assertSee('Kunjungan MCU Terbaru')->assertDontSee('data-dashboard-workspace', false)->assertDontSee('Atur dashboard');
+        $this->actingAs($doctor)->get(route('dashboard'))->assertRedirect(route('kunjungan-mcu.index'));
+        $this->get(route('kunjungan-mcu.index'))->assertOk()->assertSee('Kunjungan MCU');
 
         $this->getJson(route('dashboard.data'))->assertForbidden();
         $this->postJson(route('dashboard.saved.store'), ['name' => 'Dilarang', 'widgets' => []])->assertForbidden();

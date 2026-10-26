@@ -23,12 +23,12 @@ class DynamicMcuPackageTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin']));
         $this->get(route('mcu-category.create'))->assertOk();
         $this->post(route('mcu-category.store'), ['name' => 'Riwayat sebelumnya', 'sort_order' => 2, 'is_active' => 1])->assertSessionHasNoErrors();
-        $category = McuCategory::firstOrFail();
+        $category = McuCategory::where('name', 'Riwayat sebelumnya')->firstOrFail();
         $this->get(route('mcu-item.create', ['category' => $category->id]))->assertOk()->assertSee('Mapping hasil laporan');
         $this->post(route('mcu-item.store'), $this->itemPayload($category))->assertSessionHasNoErrors();
-        $item = McuItem::firstOrFail();
+        $item = $category->items()->firstOrFail();
         $this->get(route('paket.create'))->assertOk()->assertSee('Riwayat sebelumnya')->assertSee('Hepatitis')->assertSee('TIDAK → Normal')
-            ->assertSee('Anamnesa Pasien')->assertSee('Hasil Pemeriksaan Fisik')->assertDontSee('Anamnesa Riwayat')->assertDontSee('Antropometri Vital');
+            ->assertSee('Anamnesis')->assertSee('Hasil Pemeriksaan Fisik')->assertDontSee('Anamnesa Riwayat')->assertDontSee('Antropometri Vital');
         $this->post(route('paket.store'), ['nama_paket' => 'Paket dinamis', 'master_items' => [$item->id]])->assertSessionHasNoErrors();
         $package = Paket::firstOrFail();
         $this->assertSame([], $package->active_items);
@@ -51,10 +51,10 @@ class DynamicMcuPackageTest extends TestCase
         $payload = $this->itemPayload($category);
         unset($payload['no_report']);
         $this->post(route('mcu-item.store'), $payload)->assertSessionHasErrors('no_report');
-        $this->assertDatabaseCount('mcu_items', 0);
+        $this->assertSame(0, $category->items()->count());
         $payload['input_type'] = 'existing';
         $this->post(route('mcu-item.store'), $payload)->assertSessionHasErrors('input_type');
-        $this->assertDatabaseCount('mcu_items', 0);
+        $this->assertSame(0, $category->items()->count());
     }
 
     public function test_non_admin_cannot_configure_masters_and_inactive_items_cannot_be_selected(): void
@@ -99,7 +99,7 @@ class DynamicMcuPackageTest extends TestCase
         $payload['yes_report'] = 'Temuan baru';
         $this->put(route('mcu-item.update', $item), $payload)->assertSessionHasNoErrors();
         $this->put(route('mcu-category.update', $item->category), ['name' => 'Kategori baru', 'sort_order' => 1, 'is_active' => 0])->assertSessionHasNoErrors();
-        $this->get($report)->assertOk()->assertSee('Normal')->assertDontSee('Mapping baru')->assertDontSee('Kategori baru');
+        $this->get($report)->assertOk()->assertSee('Normal')->assertDontSee('Mapping baru')->assertSee('Kategori baru');
         $this->put($url, ['section' => 'dinamis', 'status' => 'selesai', 'lock_version' => 1, 'dynamic_answers' => [$item->id => 'YA']])->assertSessionHasNoErrors();
         $this->get($report)->assertOk()->assertSee('Ada riwayat Hepatitis')->assertDontSee('Temuan baru');
         $this->put($url, ['section' => 'dinamis', 'status' => 'draft', 'lock_version' => 1, 'dynamic_answers' => [$item->id => 'TIDAK']])->assertSessionHasErrors('pemeriksaan');
@@ -162,7 +162,9 @@ class DynamicMcuPackageTest extends TestCase
         $this->assertSame($count, McuItem::count());
         $this->assertSame('Irama', $item->fresh()->label);
         $this->assertSame('text', $item->input_type);
-        $this->assertSame(0, McuItem::whereIn('legacy_key', ['bmi', 'tinggi_badan', 'keluhan_saat_ini'])->count());
+        $this->assertSame(0, McuItem::where('legacy_key', 'bmi')->count());
+        $this->assertSame(1, McuItem::where('legacy_key', 'tinggi_badan')->count());
+        $this->assertSame(1, McuItem::where('legacy_key', 'keluhan_saat_ini')->count());
         $this->assertSame(['bmi' => true, 'tinggi_badan' => true, 'berat_badan' => true], $package->fresh()->active_items);
         $this->assertSame(22.49, Anamnesa::calculateBmi(170, 65)['bmi']);
         $this->actingAs(User::factory()->create(['role' => 'admin']))->get(route('paket.create'))->assertOk()->assertSee('BMI &amp; Kategori BMI', false)->assertSee('Irama');
@@ -229,9 +231,9 @@ class DynamicMcuPackageTest extends TestCase
         }
 
         $this->assertDatabaseCount('mcu_items', 0);
-        $this->assertDatabaseCount('mcu_categories', 0);
+        $this->assertDatabaseCount('mcu_categories', 2);
         $this->get(route('paket.create'))->assertOk()->assertSee('Belum ada item master aktif')
-            ->assertSee('value="bmi"', false)->assertSee('value="hipertensi"', false)
+            ->assertSee('value="bmi"', false)->assertDontSee('value="hipertensi"', false)
             ->assertDontSee('value="kulit"', false)->assertDontSee('value="rontgen"', false)->assertDontSee('value="lab_kolesterol"', false)
             ->assertDontSee('value="'.$skin->id.'"', false);
         $this->post(route('paket.store'), ['nama_paket' => 'Katalog terhapus', 'items' => ['kulit']])->assertSessionHasErrors('items.0');

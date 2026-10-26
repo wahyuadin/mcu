@@ -91,16 +91,15 @@
                         <legend class="mb-4 w-full rounded-xl bg-blue-900 px-6 py-4 text-lg font-semibold text-white">
                             {{ $group }}</legend>
                         @foreach ($items as $key => $item)
-                            <section data-answer-card data-answer-key="{{ $key }}"
+                            <section data-answer-card @if($item['type'] === 'choice') data-conditional-answer @endif data-answer-key="{{ $key }}"
                                 data-label="{{ $item['label'] }}"
                                 class="grid min-w-0 gap-4 rounded-xl border border-slate-200 bg-white p-6 sm:p-8">
-                                <h3 id="question-{{ $key }}" class="font-medium">{{ $item['label'] }} <span
-                                        class="text-red-700">*</span></h3>
+                                <h3 id="question-{{ $key }}" class="font-medium">{{ $item['label'] }} @if($item['required'] ?? true)<span class="text-red-700">*</span>@else <span class="text-sm text-slate-500">(opsional)</span>@endif</h3>
                                 @if (in_array($key, ['keluhan_saat_ini', 'riwayat_obat'], true))
                                     <input data-answer-input type="text" id="answer-{{ $key }}"
                                         aria-labelledby="question-{{ $key }}"
                                         name="answers[{{ $key }}][answer]"
-                                        value="{{ old('answers.' . $key . '.answer') }}" required maxlength="2000"
+                                        value="{{ old('answers.' . $key . '.answer') }}" @required($item['required'] ?? true) maxlength="2000"
                                         placeholder="{{ $key === 'keluhan_saat_ini' ? 'Tuliskan keluhan Anda, atau Tidak ada keluhan' : 'Tuliskan riwayat obat-obatan Anda, atau Tidak ada' }}"
                                         class="min-h-12 w-full min-w-0 rounded-lg border border-slate-300 bg-transparent px-3 text-base outline-none focus:border-blue-900">
                                 @elseif($item['type'] === 'choice')
@@ -109,13 +108,15 @@
                                         @foreach (['Ya', 'Tidak'] as $option)
                                             <label class="flex min-h-11 items-center gap-3"><input type="radio"
                                                     name="answers[{{ $key }}][answer]"
-                                                    value="{{ $option }}" required @checked(old('answers.' . $key . '.answer') === $option)
+                                                    value="{{ $option }}" @required($item['required'] ?? true) @checked(old('answers.' . $key . '.answer', $item['default_answer'] ?? null) === $option)
                                                     class="h-5 w-5 accent-blue-900">{{ $option }}</label>
                                         @endforeach
                                     </div>
+                                @elseif($item['type'] === 'number')
+                                    <input aria-labelledby="question-{{ $key }}" data-answer-input type="number" step="any" name="answers[{{ $key }}][answer]" value="{{ old('answers.'.$key.'.answer') }}" @required($item['required'] ?? true) class="min-h-12 w-full rounded-xl border border-slate-300 px-4 py-3 text-base">
                                 @else
                                     <textarea id="answer-{{ $key }}" aria-labelledby="question-{{ $key }}"
-                                        name="answers[{{ $key }}][answer]" required maxlength="2000" rows="2"
+                                        name="answers[{{ $key }}][answer]" @required($item['required'] ?? true) maxlength="2000" rows="2"
                                         placeholder="{{ 'Tuliskan jawaban untuk ' . $item['label'] }}"
                                         class="w-full border-0 border-b border-slate-300 bg-transparent text-base outline-none focus:border-blue-900">{{ old('answers.' . $key . '.answer') }}</textarea>
                                 @endif
@@ -123,9 +124,9 @@
                                     <p role="alert" class="text-sm text-red-700">{{ $message }}</p>
                                 @enderror
                                 <p data-client-error hidden role="alert" class="text-sm text-red-700"></p>
-                                <label class="grid min-w-0 gap-2 text-sm text-slate-500">Keterangan / sejak kapan
+                                <label @if($item['type'] === 'choice') data-conditional-note @if(old('answers.'.$key.'.answer', $item['default_answer'] ?? null) !== 'Ya') hidden @endif @endif class="grid min-w-0 gap-2 text-sm text-slate-500">Keterangan / sejak kapan
                                     (opsional)
-                                    <textarea name="answers[{{ $key }}][note]" maxlength="2000" rows="1"
+                                    <textarea name="answers[{{ $key }}][note]" @disabled($item['type'] === 'choice' && old('answers.'.$key.'.answer', $item['default_answer'] ?? null) !== 'Ya') maxlength="2000" rows="1"
                                         placeholder="Tambahkan rincian atau sejak kapan (opsional)" style="height: 83px;"
                                         class="w-full min-w-0 border-0 border-b border-slate-200 bg-transparent text-base outline-none focus:border-blue-900">{{ old('answers.' . $key . '.note') }}</textarea>
                                 </label>

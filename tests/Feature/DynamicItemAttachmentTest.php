@@ -30,7 +30,7 @@ class DynamicItemAttachmentTest extends TestCase
             $this->assertSame($type !== 'radio', $item->definition()['allow_attachment']);
             $this->get(route('mcu-item.edit', $item))->assertOk()->assertSee('Izinkan lampiran (opsional)');
         }
-        $item = McuItem::where('input_type', 'text')->firstOrFail();
+        $item = $category->items()->where('input_type', 'text')->firstOrFail();
         $this->post(route('paket.store'), ['nama_paket' => 'Paket lampiran', 'master_items' => [$item->id]])->assertSessionHasNoErrors();
         $this->assertTrue(Paket::where('nama_paket', 'Paket lampiran')->firstOrFail()->dynamic_schema[0]['items'][0]['allow_attachment']);
     }

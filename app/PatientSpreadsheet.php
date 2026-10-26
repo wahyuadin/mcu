@@ -53,21 +53,21 @@ class PatientSpreadsheet
     }
 
     /** @return array{headers: list<string>, rows: array<int, list<array{value: string|null, type: string, cached: string|null, error: string|null}>>} */
-    public function read(UploadedFile $file): array
+    public function read(UploadedFile $file, string $sheetName = 'Pasien', int $maxColumns = 20, int $maxRows = self::MAX_ROWS, int $dataStartRow = 2): array
     {
         $this->checkArchive($file);
         $book = null;
         try {
             $reader = new Xlsx;
-            $reader->setReadDataOnly(true)->setReadEmptyCells(false)->setIgnoreRowsWithNoCells(true)->setLoadSheetsOnly('Pasien');
-            $info = collect($reader->listWorksheetInfo($file->getRealPath()))->firstWhere('worksheetName', 'Pasien');
-            if (! $info || $info['totalRows'] > self::MAX_ROWS + 1 || $info['totalColumns'] > 20) {
-                $this->fail('Gunakan sheet Pasien. Maksimal 500 baris data dan 20 kolom.');
+            $reader->setReadDataOnly(true)->setReadEmptyCells(false)->setIgnoreRowsWithNoCells(true)->setLoadSheetsOnly($sheetName);
+            $info = collect($reader->listWorksheetInfo($file->getRealPath()))->firstWhere('worksheetName', $sheetName);
+            if (! $info || $info['totalRows'] > $maxRows + $dataStartRow - 1 || $info['totalColumns'] > $maxColumns || $info['totalRows'] * $info['totalColumns'] > 200000) {
+                $this->fail('Gunakan sheet '.$sheetName.'. Maksimal '.$maxRows.' baris, '.$maxColumns.' kolom, dan 200.000 sel.');
             }
             $book = $reader->load($file->getRealPath());
-            $sheet = $book->getSheetByName('Pasien');
+            $sheet = $book->getSheetByName($sheetName);
             if (! $sheet) {
-                $this->fail('Sheet Pasien tidak ditemukan. Unduh dan gunakan template XLSX.');
+                $this->fail('Sheet '.$sheetName.' tidak ditemukan. Unduh dan gunakan template XLSX.');
             }
             $headers = [];
             for ($column = 1; $column <= $info['totalColumns']; $column++) {
@@ -81,7 +81,7 @@ class PatientSpreadsheet
                 $this->fail('Judul kolom harus terisi, unik, dan maksimal 100 karakter.');
             }
             $rows = [];
-            for ($number = 2; $number <= $sheet->getHighestDataRow(); $number++) {
+            for ($number = $dataStartRow; $number <= $sheet->getHighestDataRow(); $number++) {
                 $row = [];
                 foreach ($headers as $index => $field) {
                     $cell = $sheet->getCell([($index + 1), $number]);

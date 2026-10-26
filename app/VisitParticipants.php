@@ -19,7 +19,7 @@ class VisitParticipants
             $example->setRelation('paket', $package);
             foreach ((new Anamnesa)->workflowProgress($example) as $key => $section) {
                 if ($section['included']) {
-                    $cards[$key] ??= ['label' => ['anamnesa' => 'Anamnesis', 'fisik' => 'Fisik'][$key] ?? $section['label'], 'done' => 0, 'total' => 0];
+                    $cards[$key] ??= ['label' => $section['label'], 'done' => 0, 'total' => 0];
                 }
             }
         }
@@ -34,10 +34,6 @@ class VisitParticipants
             $exam = $participant->anamnesa ?? new Anamnesa;
             $attendance[$participant->id] = $participant->hasStoredPhoto();
             $sections = array_filter($exam->workflowProgress($participant), fn (array $section): bool => $section['included']);
-            foreach ($sections as $key => &$section) {
-                $section['label'] = ['anamnesa' => 'Anamnesis', 'fisik' => 'Fisik'][$key] ?? $section['label'];
-            }
-            unset($section);
             $progress[$participant->id] = array_map(fn (array $section): array => ['label' => $section['label'], 'status' => $section['status']], $sections);
             $states = ['registrasi' => $attendance[$participant->id], 'siap_finalisasi' => $participant->status_pemeriksaan === 'siap_finalisasi', 'selesai' => $participant->status_pemeriksaan === 'selesai'];
             foreach ($sections as $key => $section) {
@@ -65,6 +61,8 @@ class VisitParticipants
             $card['total'] = $visitParticipantTotal;
         }
         unset($card);
+        $clinical = array_diff_key($cards, array_flip(['', 'registrasi', 'siap_finalisasi', 'selesai']));
+        $cards = array_intersect_key($cards, array_flip(['', 'registrasi'])) + app(McuCategoryPresentation::class)->arrange($clinical) + array_intersect_key($cards, array_flip(['siap_finalisasi', 'selesai']));
         $active = $cards[$filter] ?? ['label' => $filter, 'done' => $counts[$filter] ?? 0, 'total' => $visitParticipantTotal];
 
         return ['filterCards' => $cards, 'activeProgress' => $active, 'categoryProgress' => $progress, 'attendance' => $attendance, 'matchingIds' => $matching, 'visitParticipantTotal' => $visitParticipantTotal];

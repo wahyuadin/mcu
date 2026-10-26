@@ -62,6 +62,9 @@ class MasterBulkDeleteController extends Controller
                     if ($record instanceof Paket && $record->karyawans()->exists()) {
                         return ['name' => $name, 'deleted' => false, 'reason' => 'Paket dengan peserta tidak dapat dihapus.'];
                     }
+                    if ($record instanceof McuCategory && $record->isProtected()) {
+                        return ['name' => $name, 'deleted' => false, 'reason' => 'Kategori bawaan tidak dapat dihapus.'];
+                    }
                     if ($record instanceof McuCategory && $record->subcategories()->exists()) {
                         return ['name' => $name, 'deleted' => false, 'reason' => 'Kategori masih memiliki subkategori. Hapus atau pindahkan subkategori terlebih dahulu.'];
                     }

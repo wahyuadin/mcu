@@ -20,9 +20,10 @@ class McuCategoryOrderTest extends TestCase
         $schema = [['id' => $first->id, 'name' => $first->name, 'order' => 0, 'items' => []]];
         $package = Paket::factory()->master()->create(['dynamic_schema' => $schema]);
         $url = route('mcu-category-order.show');
-        $response = $this->getJson($url)->assertOk()->assertJsonPath('items.0.id', $first->id)->assertJsonPath('items.1.is_active', false);
+        $protected = McuCategory::whereIn('legacy_group', ['anamnesa_riwayat', 'pemeriksaan_fisik'])->pluck('id')->all();
+        $response = $this->getJson($url)->assertOk()->assertJsonCount(4, 'items')->assertJsonFragment(['id' => $second->id, 'is_active' => false]);
 
-        $this->putJson(route('mcu-category-order.update'), ['version' => $response->json('version'), 'items' => [$second->id, $first->id]])
+        $this->putJson(route('mcu-category-order.update'), ['version' => $response->json('version'), 'items' => [$second->id, $first->id, ...$protected]])
             ->assertOk()->assertJsonPath('message', 'Urutan kategori berhasil disimpan. Paket dan hasil pemeriksaan lama tidak berubah.');
 
         $this->assertSame(0, $second->fresh()->sort_order);
@@ -44,7 +45,7 @@ class McuCategoryOrderTest extends TestCase
         $this->putJson($url, ['version' => $version, 'items' => [$categories[0]->id, fake()->uuid()]])->assertUnprocessable()->assertJsonValidationErrors('items');
         $this->putJson($url, ['version' => $version, 'items' => ['first' => $categories[0]->id, 'second' => $categories[1]->id]])->assertUnprocessable()->assertJsonValidationErrors('items');
 
-        $this->assertSame([8, 8], McuCategory::pluck('sort_order')->all());
+        $this->assertSame([8, 8], McuCategory::whereKey($categories->modelKeys())->pluck('sort_order')->all());
     }
 
     public function test_stale_versions_cannot_overwrite_added_or_reordered_categories(): void
@@ -57,7 +58,8 @@ class McuCategoryOrderTest extends TestCase
 
         $this->putJson($url, ['version' => $version, 'items' => [$first->id]])->assertUnprocessable()->assertJsonValidationErrors('version');
         $version = $this->getJson($url)->json('version');
-        $this->putJson($url, ['version' => $version, 'items' => [$second->id, $first->id]])->assertOk();
+        $protected = McuCategory::whereIn('legacy_group', ['anamnesa_riwayat', 'pemeriksaan_fisik'])->pluck('id')->all();
+        $this->putJson($url, ['version' => $version, 'items' => [$second->id, $first->id, ...$protected]])->assertOk();
         $this->putJson($url, ['version' => $version, 'items' => [$first->id, $second->id]])->assertUnprocessable()->assertJsonValidationErrors('version');
 
         $this->assertSame(0, $second->fresh()->sort_order);
@@ -73,16 +75,16 @@ class McuCategoryOrderTest extends TestCase
         $this->putJson($url, [])->assertForbidden();
     }
 
-    public function test_order_endpoint_returns_empty_after_bulk_deletion_and_never_restores_deleted_categories(): void
+    public function test_order_endpoint_retains_only_protected_category_after_bulk_deletion_and_never_restores_deleted_categories(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
         $category = McuCategory::factory()->create(['name' => 'Kategori dihapus']);
         $url = route('mcu-category-order.show');
-        $before = $this->getJson($url)->assertOk()->assertHeader('Cache-Control', 'no-store, private')->assertJsonCount(1, 'items');
+        $before = $this->getJson($url)->assertOk()->assertHeader('Cache-Control', 'no-store, private')->assertJsonCount(3, 'items');
 
         $this->post(route('mcu-category.bulk-destroy'), ['ids' => [$category->id]])->assertRedirect(route('mcu-category.index'));
 
-        $after = $this->getJson($url)->assertOk()->assertHeader('Cache-Control', 'no-store, private')->assertJsonCount(0, 'items');
+        $after = $this->getJson($url)->assertOk()->assertHeader('Cache-Control', 'no-store, private')->assertJsonCount(2, 'items')->assertJsonPath('items.0.label', 'Anamnesis');
         $this->assertNotSame($before->json('version'), $after->json('version'));
         $this->get(route('mcu-category.create'))->assertOk()->assertSee('Atur urutan kategori');
         $this->putJson(route('mcu-category-order.update'), ['version' => $before->json('version'), 'items' => [$category->id]])->assertUnprocessable()->assertJsonValidationErrors('version');

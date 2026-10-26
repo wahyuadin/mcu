@@ -93,9 +93,10 @@ class McuTemplateMasterSeeder extends Seeder
                 throw new RuntimeException('Isi template MCU tidak sesuai dengan 3 kategori, 11 subkategori, dan 63 item dinamis yang diharapkan.');
             }
 
-            DB::table('mcu_items')->whereNotIn('id', $this->itemIds)->delete();
-            DB::table('mcu_subcategories')->whereNotIn('id', $subcategoryIds)->delete();
-            DB::table('mcu_categories')->whereNotIn('id', $categoryIds)->delete();
+            $protectedCategories = McuCategory::whereIn('legacy_group', ['anamnesa_riwayat', 'pemeriksaan_fisik'])->pluck('id');
+            DB::table('mcu_items')->whereNotIn('mcu_category_id', $protectedCategories)->whereNotIn('id', $this->itemIds)->delete();
+            DB::table('mcu_subcategories')->whereNotIn('mcu_category_id', $protectedCategories)->whereNotIn('id', $subcategoryIds)->delete();
+            DB::table('mcu_categories')->whereNotIn('id', $protectedCategories)->whereNotIn('id', $categoryIds)->delete();
         });
     }
 

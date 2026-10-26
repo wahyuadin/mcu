@@ -1,4 +1,7 @@
+import { initializeAnswerNotes } from './examination-fields';
+
 export function initializePublicAnamnesa(form) {
+    initializeAnswerNotes(form);
     const sections = [...form.querySelectorAll('[data-form-section]')];
     const back = form.querySelector('[data-form-back]');
     const next = form.querySelector('[data-form-next]');
@@ -15,9 +18,9 @@ export function initializePublicAnamnesa(form) {
             const title = document.createElement('dt');
             const answer = document.createElement('dd');
             title.textContent = card.dataset.label;
-            const selected = card.querySelector('[data-answer-input]') || card.querySelector('[data-tag-value]') || card.querySelector('input[type="radio"]:checked') || card.querySelector('textarea');
+            const selected = card.querySelector('[data-answer-input]') || card.querySelector('[data-tag-value]') || card.querySelector('input[type="radio"]:checked') || card.querySelector('textarea[name$="[answer]"]');
             const note = [...card.querySelectorAll('textarea')].find((field) => field.name.endsWith('[note]'));
-            answer.textContent = `${selected?.value || 'Belum diisi'}${note?.value ? ` — ${note.value}` : ''}`;
+            answer.textContent = `${selected?.value || 'Belum diisi'}${note?.value && !note.disabled ? ` — ${note.value}` : ''}`;
             row.className = 'min-w-0 border-b border-slate-200 pb-3';
             title.className = 'min-w-0 break-words';
             answer.className = 'min-w-0 whitespace-pre-line break-words font-semibold [overflow-wrap:anywhere]';

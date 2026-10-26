@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\LaboratoryResult;
 use App\McuCatalog;
+use App\McuCategoryPresentation;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -20,7 +21,7 @@ class Anamnesa extends Model implements Auditable
 
     protected $fillable = [
         'anamnesa_data', 'laboratorium', 'penunjang', 'section_status', 'revisions', 'package_items',
-        'dynamic_schema', 'dynamic_answers', 'dynamic_attachments', 'category_doctors',
+        'dynamic_schema', 'dynamic_answers', 'dynamic_notes', 'dynamic_attachments', 'category_doctors',
         'dokter_fisik_id', 'finalized_at', 'finalized_by', 'lock_version',
         'karyawan_id',
         'rencana_kunjungan_id',
@@ -86,7 +87,7 @@ class Anamnesa extends Model implements Auditable
         return [
             'anamnesa_data' => 'array', 'laboratorium' => 'array', 'penunjang' => 'array',
             'section_status' => 'array', 'revisions' => 'array', 'package_items' => 'array',
-            'dynamic_schema' => 'array', 'dynamic_answers' => 'array', 'dynamic_attachments' => 'array', 'category_doctors' => 'array',
+            'dynamic_schema' => 'array', 'dynamic_answers' => 'array', 'dynamic_notes' => 'array', 'dynamic_attachments' => 'array', 'category_doctors' => 'array',
             'finalized_at' => 'datetime', 'lock_version' => 'integer',
             'riwayat_penyakit_dahulu' => 'array',
             'riwayat_penyakit_keluarga' => 'array',
@@ -115,8 +116,59 @@ class Anamnesa extends Model implements Auditable
     /** @return array<string, array<string, mixed>> */
     public function categoryGroups(Karyawan $participant): array
     {
-        return collect($this->dynamicGroups($participant))->filter(fn (array $group): bool => $group['items'] !== [])
+        return collect($this->dynamicGroups($participant))->filter(fn (array $group): bool => $group['items'] !== [] && ! in_array($this->groupSection($group), ['anamnesa', 'fisik'], true))
+            ->map(function (array $group): array {
+                $master = app(McuCategoryPresentation::class)->categories()->firstWhere('id', $group['id']);
+
+                return array_replace($group, ['name' => $master?->name ?? $group['name'], 'order' => $master?->sort_order ?? $group['order']]);
+            })
             ->sortBy('order')->keyBy(fn (array $group): string => 'kategori-'.$group['id'])->all();
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function anamnesisGroups(Karyawan $participant): array
+    {
+        return array_map($this->displayGroup(...), array_values(array_filter($this->dynamicGroups($participant), fn (array $group): bool => $this->groupSection($group) === 'anamnesa' && $group['items'] !== [])));
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function physicalMasterGroups(Karyawan $participant): array
+    {
+        return array_map($this->displayGroup(...), array_values(array_filter($this->dynamicGroups($participant), fn (array $group): bool => $this->groupSection($group) === 'fisik' && $group['items'] !== [])));
+    }
+
+    /** @param array<string, mixed> $group
+     * @return array<string, mixed>
+     */
+    private function displayGroup(array $group): array
+    {
+        $master = app(McuCategoryPresentation::class)->categories()->firstWhere('id', $group['id']);
+
+        return array_replace($group, ['name' => $master?->name ?? $group['name']]);
+    }
+
+    /** @param array<string, mixed> $group */
+    public function groupSection(array $group): string
+    {
+        if (in_array($group['section'] ?? null, ['anamnesa', 'fisik'], true)) {
+            return $group['section'];
+        }
+        $master = app(McuCategoryPresentation::class)->categories()->firstWhere('id', $group['id']);
+
+        return $master?->isAnamnesis() ? 'anamnesa' : ($master?->isPhysical() ? 'fisik' : ($group['section'] ?? 'kategori-'.$group['id']));
+    }
+
+    public function physicalMeasurement(Karyawan $participant, string $key): mixed
+    {
+        foreach ($this->physicalMasterGroups($participant) as $group) {
+            foreach ($group['items'] as $item) {
+                if (($item['physical_key'] ?? null) === $key) {
+                    return ($this->dynamic_answers ?? [])[$item['id']] ?? null;
+                }
+            }
+        }
+
+        return $this->includes($participant, $key) ? $this->$key : null;
     }
 
     /** @return array<string, array{label: string, status: string, missing: list<string>, included: bool}> */
@@ -157,7 +209,7 @@ class Anamnesa extends Model implements Auditable
         $conclusion = $sections['kesimpulan'];
         unset($sections['kesimpulan']);
 
-        return $sections + $this->categoryProgress($participant) + ['kesimpulan' => $conclusion];
+        return app(McuCategoryPresentation::class)->arrange($sections + $this->categoryProgress($participant)) + ['kesimpulan' => $conclusion];
     }
 
     /** @param array<string, mixed> $item */
@@ -170,13 +222,16 @@ class Anamnesa extends Model implements Auditable
         if ($answer === null || $answer === '') {
             return 'Belum diisi';
         }
+        $value = (string) $answer;
         if ($item['type'] === 'radio') {
-            return match ($answer) {
+            $value = match ($answer) {
                 'YA' => $item['yes_report'], 'TIDAK' => $item['no_report'], default => 'Belum diisi',
             };
         }
 
-        return (string) $answer;
+        $note = ($this->dynamic_notes ?? [])[$item['id']] ?? null;
+
+        return $value.(filled($note) && ($item['type'] !== 'radio' || $answer === 'YA') ? ' — '.$note : '');
     }
 
     /** @param array<string, mixed> $item
@@ -192,6 +247,16 @@ class Anamnesa extends Model implements Auditable
     {
         $groups = [];
         foreach ($this->dynamicGroups($participant) as $group) {
+            if (in_array($this->groupSection($group), ['anamnesa', 'fisik'], true)) {
+                if ($section === $this->groupSection($group)) {
+                    $groups[] = $group;
+                }
+
+                continue;
+            }
+            if (in_array($section, ['anamnesa', 'fisik'], true)) {
+                continue;
+            }
             $group['items'] = array_values(array_filter($group['items'], fn (array $item): bool => ($item['type'] === 'laboratory') === ($section === 'laboratorium')));
             if ($group['items'] !== []) {
                 $groups[] = $group;
@@ -249,9 +314,6 @@ class Anamnesa extends Model implements Auditable
                 }
             }
         }
-        if ($sections['fisik']['included'] && ! $this->dokter_fisik_id) {
-            $sections['fisik']['missing'][] = 'Dokter pemeriksa fisik';
-        }
         foreach (McuCatalog::laboratory() as $items) {
             foreach ($items as $key => $item) {
                 if (! $this->includes($participant, $key)) {
@@ -271,9 +333,13 @@ class Anamnesa extends Model implements Auditable
             $sections['penunjang']['included'] = true;
             $sections['penunjang']['missing'] = [...$sections['penunjang']['missing'], ...$item['missing']];
         }
-        foreach ($includeDynamic ? $this->dynamicGroups($participant) : [] as $group) {
+        foreach ($this->dynamicGroups($participant) as $group) {
+            $builtinSection = in_array($group['section'] ?? null, ['anamnesa', 'fisik'], true) ? $group['section'] : null;
+            if (! $includeDynamic && ! $builtinSection) {
+                continue;
+            }
             foreach ($group['items'] as $item) {
-                $section = $item['type'] === 'laboratory' ? 'laboratorium' : 'dinamis';
+                $section = $builtinSection ?? ($item['type'] === 'laboratory' ? 'laboratorium' : 'dinamis');
                 $sections[$section]['included'] = true;
                 if ($item['required'] && blank(($this->dynamic_answers ?? [])[$item['id']] ?? null)) {
                     $sections[$section]['missing'][] = $group['name'].' — '.$item['label'];
@@ -281,6 +347,9 @@ class Anamnesa extends Model implements Auditable
                     $sections[$section]['missing'][] = $group['name'].' — '.$item['label'].' (hasil tidak dapat dibandingkan)';
                 }
             }
+        }
+        if ($sections['fisik']['included'] && ! $this->dokter_fisik_id) {
+            $sections['fisik']['missing'][] = 'Dokter pemeriksa fisik';
         }
         $sections['kesimpulan']['included'] = true;
         foreach (['catatan_dokter' => 'Kesimpulan medis', 'anjuran_saran' => 'Saran', 'status_kelaikan' => 'Status kelayakan', 'dokter_id' => 'Dokter penanggung jawab'] as $field => $label) {
