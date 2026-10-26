@@ -1,6 +1,6 @@
 <section data-exam-category="{{ $group['id'] }}" class="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6">
     <h3 class="text-lg font-bold">{{ $group['name'] }}</h3>
-    @if($group['has_responsible_doctor'] ?? true)
+    @if(($group['has_responsible_doctor'] ?? true) && $exam->groupSection($group) !== 'fisik')
         @include('mcu.field', ['field' => 'category_doctors.'.$group['id'], 'label' => 'Dokter Pemeriksa (opsional)', 'type' => 'select', 'options' => $doctors->pluck('nama_dokter', 'id'), 'value' => ($exam->category_doctors ?? [])[$group['id']] ?? null])
     @endif
     @foreach(\App\LaboratoryResult::sections($group['items']) as $subsection)
@@ -40,7 +40,7 @@
                     @if($item['help_text'])<p class="text-xs text-slate-500">{{ $item['help_text'] }}</p>@endif
                     @include('mcu.dynamic-attachment-field', ['item' => $item])
                 @endif
-                @if($item['type'] !== 'label')
+                @if($item['type'] === 'radio')
                     <fieldset @if($item['type'] === 'radio') data-conditional-note @if($answer !== 'YA') hidden disabled @endif @endif>
                         @include('mcu.field', ['field' => 'dynamic_notes.'.$item['id'], 'label' => 'Keterangan / sejak kapan (opsional)', 'type' => 'textarea', 'value' => $note, 'placeholder' => 'Tambahkan rincian atau sejak kapan (opsional)'])
                     </fieldset>

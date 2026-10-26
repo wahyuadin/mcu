@@ -13,7 +13,7 @@ class McuReport
         $sections = [];
         $physical = $this->physical($participant, $exam);
         if ($physical !== []) {
-            $sections[] = ['title' => 'HASIL PEMERIKSAAN FISIK', 'kind' => 'columns', 'groups' => $physical, 'doctor_id' => $exam->dokter_fisik_id, 'show_doctor' => true, 'attachments' => []];
+            $sections[] = ['title' => 'HASIL PEMERIKSAAN FISIK', 'kind' => 'columns', 'groups' => $physical, 'doctor_id' => $exam->dokter_fisik_id, 'show_doctor' => $exam->sectionHasDoctor($participant, 'fisik'), 'attachments' => []];
         }
         $history = [];
         $number = 0;
@@ -32,7 +32,7 @@ class McuReport
             }
         }
         if ($history !== []) {
-            $sections[] = ['title' => 'ANAMNESA PASIEN', 'kind' => 'columns', 'groups' => $history, 'doctor_id' => $exam->dokter_id, 'show_doctor' => true, 'attachments' => []];
+            $sections[] = ['title' => 'ANAMNESA PASIEN', 'kind' => 'columns', 'groups' => $history, 'doctor_id' => $exam->dokter_id, 'show_doctor' => $exam->sectionHasDoctor($participant, 'anamnesa'), 'attachments' => []];
         }
 
         $laboratory = [];
@@ -127,7 +127,7 @@ class McuReport
             }
             $sections[] = ['title' => $title, 'category_id' => $category['id'], 'kind' => $isColumns ? 'columns' : ($hasLaboratory ? 'laboratory' : 'detail'), 'groups' => $groups,
                 'doctor_id' => $isPhysical ? $exam->dokter_fisik_id : (($category['has_responsible_doctor'] ?? true) ? (($exam->category_doctors ?? [])[$category['id']] ?? null) : null),
-                'show_doctor' => $isPhysical || ($category['has_responsible_doctor'] ?? true), 'attachments' => $attachments];
+                'show_doctor' => $isPhysical ? $exam->sectionHasDoctor($participant, 'fisik') : ($category['has_responsible_doctor'] ?? true), 'attachments' => $attachments];
         }
 
         foreach ($sections as &$section) {

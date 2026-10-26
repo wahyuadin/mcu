@@ -431,6 +431,9 @@ class PemeriksaanController extends Controller
         $data = $request->validate($rules);
         $data['anamnesa'] ??= [];
         foreach ($data['anamnesa'] as $key => &$answer) {
+            if ((collect(McuCatalog::anamnesa())->collapse()[$key]['type'] ?? null) !== 'choice') {
+                $answer['note'] = $exam->historyValue($key)['note'];
+            }
             if ((collect(McuCatalog::anamnesa())->collapse()[$key]['type'] ?? null) === 'choice' && ($answer['answer'] ?? null) !== 'Ya') {
                 $answer['note'] = null;
             }
@@ -477,7 +480,12 @@ class PemeriksaanController extends Controller
         }
         $data = $request->validate($rules);
         $exam->dynamic_answers = array_replace($exam->dynamic_answers ?? [], $data['dynamic_answers'] ?? []);
-        $notes = array_replace($exam->dynamic_notes ?? [], $data['dynamic_notes'] ?? []);
+        $notes = $exam->dynamic_notes ?? [];
+        foreach ($data['dynamic_notes'] ?? [] as $id => $note) {
+            if (($definitions[$id]['type'] ?? null) === 'radio') {
+                $notes[$id] = $note;
+            }
+        }
         foreach ($definitions as $id => $item) {
             if ($item['type'] === 'radio' && (($exam->dynamic_answers ?? [])[$id] ?? null) !== 'YA') {
                 $notes[$id] = null;

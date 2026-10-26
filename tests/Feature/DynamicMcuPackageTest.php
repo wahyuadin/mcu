@@ -223,16 +223,16 @@ class DynamicMcuPackageTest extends TestCase
         foreach (McuItem::pluck('id')->chunk(30) as $ids) {
             $this->post(route('mcu-item.bulk-destroy'), ['ids' => $ids->values()->all()])->assertRedirect(route('mcu-item.index'));
         }
-        foreach (McuSubcategory::pluck('id') as $id) {
+        foreach (McuSubcategory::doesntHave('items')->pluck('id') as $id) {
             $this->delete(route('mcu-subcategory.destroy', $id))->assertRedirect(route('mcu-subcategory.index'));
         }
         foreach (McuCategory::pluck('id')->chunk(30) as $ids) {
             $this->post(route('mcu-category.bulk-destroy'), ['ids' => $ids->values()->all()])->assertRedirect(route('mcu-category.index'));
         }
 
-        $this->assertDatabaseCount('mcu_items', 0);
+        $this->assertDatabaseCount('mcu_items', 2);
         $this->assertDatabaseCount('mcu_categories', 2);
-        $this->get(route('paket.create'))->assertOk()->assertSee('Belum ada item master aktif')
+        $this->get(route('paket.create'))->assertOk()->assertSee('Tinggi Badan (cm)')->assertSee('Berat Badan (kg)')
             ->assertSee('value="bmi"', false)->assertDontSee('value="hipertensi"', false)
             ->assertDontSee('value="kulit"', false)->assertDontSee('value="rontgen"', false)->assertDontSee('value="lab_kolesterol"', false)
             ->assertDontSee('value="'.$skin->id.'"', false);

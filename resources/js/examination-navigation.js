@@ -140,14 +140,6 @@ export function setupExaminationNavigation(document, window) {
     notice.textContent = 'Ada perubahan yang belum disimpan.';
     const status = form.querySelector('[data-save-status]');
     if (status) status.textContent = 'Ada perubahan yang belum disimpan';
-    const height = Number(form.elements.namedItem('tinggi_badan')?.value);
-    const weight = Number(form.elements.namedItem('berat_badan')?.value);
-    const bmi = form.querySelector('[data-bmi]');
-    if (bmi)
-      bmi.textContent =
-        height > 0 && weight > 0
-          ? `${(weight / (height / 100) ** 2).toFixed(2)} · kategori dihitung saat disimpan`
-          : '— · isi tinggi dan berat badan';
   };
   document.addEventListener('input', trackChanges);
   document.addEventListener('change', trackChanges);

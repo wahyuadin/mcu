@@ -171,6 +171,13 @@ class Anamnesa extends Model implements Auditable
         return $this->includes($participant, $key) ? $this->$key : null;
     }
 
+    public function sectionHasDoctor(Karyawan $participant, string $section): bool
+    {
+        $groups = array_filter($this->dynamicGroups($participant), fn (array $group): bool => $this->groupSection($group) === $section);
+
+        return $groups === [] || collect($groups)->contains(fn (array $group): bool => $group['has_responsible_doctor'] ?? true);
+    }
+
     /** @return array<string, array{label: string, status: string, missing: list<string>, included: bool}> */
     public function categoryProgress(Karyawan $participant): array
     {
@@ -334,7 +341,7 @@ class Anamnesa extends Model implements Auditable
             $sections['penunjang']['missing'] = [...$sections['penunjang']['missing'], ...$item['missing']];
         }
         foreach ($this->dynamicGroups($participant) as $group) {
-            $builtinSection = in_array($group['section'] ?? null, ['anamnesa', 'fisik'], true) ? $group['section'] : null;
+            $builtinSection = in_array($this->groupSection($group), ['anamnesa', 'fisik'], true) ? $this->groupSection($group) : null;
             if (! $includeDynamic && ! $builtinSection) {
                 continue;
             }
@@ -348,7 +355,7 @@ class Anamnesa extends Model implements Auditable
                 }
             }
         }
-        if ($sections['fisik']['included'] && ! $this->dokter_fisik_id) {
+        if ($sections['fisik']['included'] && $this->sectionHasDoctor($participant, 'fisik') && ! $this->dokter_fisik_id) {
             $sections['fisik']['missing'][] = 'Dokter pemeriksa fisik';
         }
         $sections['kesimpulan']['included'] = true;

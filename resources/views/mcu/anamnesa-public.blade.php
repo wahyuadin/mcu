@@ -124,7 +124,7 @@
                                     <p role="alert" class="text-sm text-red-700">{{ $message }}</p>
                                 @enderror
                                 <p data-client-error hidden role="alert" class="text-sm text-red-700"></p>
-                                <label @if($item['type'] === 'choice') data-conditional-note @if(old('answers.'.$key.'.answer', $item['default_answer'] ?? null) !== 'Ya') hidden @endif @endif class="grid min-w-0 gap-2 text-sm text-slate-500">Keterangan / sejak kapan
+                                @if($item['type'] === 'choice')<label data-conditional-note @if(old('answers.'.$key.'.answer', $item['default_answer'] ?? null) !== 'Ya') hidden @endif class="grid min-w-0 gap-2 text-sm text-slate-500">Keterangan / sejak kapan
                                     (opsional)
                                     <textarea name="answers[{{ $key }}][note]" @disabled($item['type'] === 'choice' && old('answers.'.$key.'.answer', $item['default_answer'] ?? null) !== 'Ya') maxlength="2000" rows="1"
                                         placeholder="Tambahkan rincian atau sejak kapan (opsional)" style="height: 83px;"
@@ -133,6 +133,7 @@
                                 @error('answers.' . $key . '.note')
                                     <p role="alert" class="text-sm text-red-700">{{ $message }}</p>
                                 @enderror
+                                @endif
                             </section>
                         @endforeach
                     </fieldset>

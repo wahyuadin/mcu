@@ -45,21 +45,21 @@ class DynamicPhysicalAndRadioTest extends TestCase
         $category = $height->category;
         $schema = $participant->paket->dynamic_schema;
         $exam = $participant->anamnesa()->create(['rencana_kunjungan_id' => $participant->rencana_kunjungan_id, 'status' => 'final', 'package_items' => [], 'dynamic_schema' => $schema, 'dynamic_answers' => [$height->id => 170]]);
-        $height->update(['label' => 'Tinggi diubah', 'is_active' => false]);
+        $height->update(['label' => 'Tinggi diubah']);
         $this->delete(route('mcu-category.destroy', $category))->assertSessionHasErrors('category');
         $this->put(route('mcu-category.update', $category), ['name' => $category->name, 'is_active' => 0])->assertSessionHasNoErrors();
         $this->post(route('mcu-category.bulk-destroy'), ['ids' => [$category->id]])->assertSessionHas('bulkDeleteResults', fn ($rows): bool => ! $rows[0]['deleted']);
         $this->seed(McuTemplateMasterSeeder::class);
 
         $this->assertSame('Tinggi diubah', $height->fresh()->label);
-        $this->assertFalse($height->fresh()->is_active);
+        $this->assertTrue($height->fresh()->is_active);
         $this->assertSame($schema, $participant->paket->fresh()->dynamic_schema);
         $this->assertSame($schema, $exam->fresh()->dynamic_schema);
         $this->put(route('pemeriksaan.update', [$participant->rencanaKunjungan, $participant]), ['section' => 'fisik', 'status' => 'draft', 'lock_version' => 0, 'dynamic_answers' => [$height->id => 180]])->assertForbidden();
         $this->assertSame(170, $exam->fresh()->dynamic_answers[$height->id]);
-        $this->post(route('paket.store'), ['nama_paket' => 'Item nonaktif', 'master_items' => [$height->id]])->assertSessionHasErrors('master_items.0');
+        $this->post(route('paket.store'), ['nama_paket' => 'Item nonaktif', 'master_items' => [$height->id]])->assertSessionHasErrors('master_items');
         $this->post(route('paket.store'), ['nama_paket' => 'BMI tanpa item aktif', 'items' => ['bmi']])->assertSessionHasErrors('items');
-        $this->put(route('mcu-item.update', $height), ['mcu_category_id' => $category->id, 'label' => 'Tinggi badan', 'input_type' => 'text', 'is_active' => 0, 'is_required' => 1])->assertSessionHasErrors('input_type');
+        $this->put(route('mcu-item.update', $height), ['mcu_category_id' => $category->id, 'label' => 'Tinggi badan', 'input_type' => 'text', 'is_active' => 0, 'is_required' => 1])->assertSessionHasErrors('item');
         $this->assertSame('number', $height->fresh()->input_type);
     }
 
@@ -142,6 +142,7 @@ class DynamicPhysicalAndRadioTest extends TestCase
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
         $category = McuCategory::where('legacy_group', 'pemeriksaan_fisik')->sole();
+        $category->update(['has_responsible_doctor' => true]);
         $height = $category->items()->where('legacy_key', 'tinggi_badan')->sole();
         $weight = $category->items()->where('legacy_key', 'berat_badan')->sole();
         $package = Paket::factory()->create(['active_items' => []]);

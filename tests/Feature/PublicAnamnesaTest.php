@@ -279,7 +279,7 @@ class PublicAnamnesaTest extends TestCase
             ->assertSee('placeholder="Tambahkan rincian atau sejak kapan (opsional)"', false)
             ->assertSee('data-anamnesa-confirm', false)->assertSee('data-confirm-cancel', false)->assertSee('data-confirm-accept', false)
             ->assertSee('aria-labelledby="review-title"', false)->assertSee('<h2 id="review-title"', false)->assertDontSee('<legend class="text-lg font-semibold">Periksa jawaban', false);
-        $this->assertSame(3, substr_count($response->getContent(), 'style="height: 83px;"'));
+        $this->assertSame(1, substr_count($response->getContent(), 'style="height: 83px;"'));
         $data = $this->answers();
         $data['answers']['keluhan_saat_ini']['answer'] = 'Pusing saat bangun tidur';
         $data['answers']['riwayat_obat'] = ['answer' => 'Amlodipine 5 mg', 'note' => 'Sejak tahun lalu'];
@@ -287,6 +287,7 @@ class PublicAnamnesaTest extends TestCase
         $submission = $participant->fresh()->anamnesa_submission;
         $this->assertSame('Pusing saat bangun tidur', $submission['answers']['keluhan_saat_ini']['answer']);
         $this->assertSame('Amlodipine 5 mg', $submission['answers']['riwayat_obat']['answer']);
+        $this->assertNull($submission['answers']['riwayat_obat']['note']);
     }
 
     public function test_complaint_tags_reject_conflicting_empty_duplicate_and_oversized_values(): void

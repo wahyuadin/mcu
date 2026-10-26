@@ -144,11 +144,9 @@ class PaketController extends Controller
             $data['dynamic_schema'][$categoryId] ??= ['id' => $categoryId, 'name' => $item->category->name, 'order' => $item->category->sort_order, 'has_responsible_doctor' => $item->category->has_responsible_doctor, 'items' => []];
             if ($item->category->isAnamnesis()) {
                 $data['dynamic_schema'][$categoryId]['section'] = 'anamnesa';
-                $data['dynamic_schema'][$categoryId]['has_responsible_doctor'] = false;
             }
             if ($item->category->isPhysical()) {
                 $data['dynamic_schema'][$categoryId]['section'] = 'fisik';
-                $data['dynamic_schema'][$categoryId]['has_responsible_doctor'] = false;
             }
             $data['dynamic_schema'][$categoryId]['items'][] = $item->definition();
         }

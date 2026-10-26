@@ -50,9 +50,9 @@
                 @if($reviewSubmission) @php($history = $peserta->anamnesa_submission['answers'][$key] ?? ['answer' => null, 'note' => null]) @endif
                 <div @if($item['type'] === 'choice') data-conditional-answer @endif class="grid gap-4 border-t border-slate-100 pt-4 sm:grid-cols-2">
                     @include('mcu.field', ['field' => 'anamnesa.'.$key.'.answer', 'label' => $item['label'], 'type' => $item['type'] === 'choice' ? 'select' : 'textarea', 'value' => $history['answer'], 'options' => ['Ya' => 'Ya', 'Tidak' => 'Tidak']])
-                    <fieldset @if($item['type'] === 'choice') data-conditional-note @if(old('anamnesa.'.$key.'.answer', $history['answer']) !== 'Ya') hidden disabled @endif @endif>
+                    @if($item['type'] === 'choice')<fieldset data-conditional-note @if(old('anamnesa.'.$key.'.answer', $history['answer']) !== 'Ya') hidden disabled @endif>
                         @include('mcu.field', ['field' => 'anamnesa.'.$key.'.note', 'label' => 'Keterangan / sejak kapan (opsional)', 'type' => 'textarea', 'value' => $history['note']])
-                    </fieldset>
+                    </fieldset>@endif
                 </div>
             @endforeach
         </section>@endif
@@ -61,7 +61,7 @@
         @include('mcu.dynamic-examination-group')
     @endforeach
 @elseif($tab === 'fisik')
-    @if($progress['fisik']['included'])
+    @if($progress['fisik']['included'] && $exam->sectionHasDoctor($peserta, 'fisik'))
         <section class="rounded-2xl border border-slate-200 bg-white p-6">@include('mcu.field', ['field' => 'dokter_fisik_id', 'label' => 'Dokter pemeriksa fisik', 'type' => 'select', 'options' => $doctors->pluck('nama_dokter', 'id'), 'value' => $exam->dokter_fisik_id])</section>
     @endif
     @foreach($physicalGroups as $group => $items)

@@ -59,6 +59,15 @@ class McuItemController extends Controller
 
     public function update(Request $request, McuItem $item): RedirectResponse
     {
+        if ($item->isBmiMeasurement()) {
+            $data = $request->validate(['label' => ['required', 'string', 'max:255']]);
+            if (array_diff(array_keys($request->all()), ['label', '_token', '_method']) !== []) {
+                throw ValidationException::withMessages(['item' => 'Item tinggi dan berat badan hanya dapat diubah namanya.']);
+            }
+            $item->update($data);
+
+            return redirect()->route('mcu-item.index', ['category' => $item->mcu_category_id])->with('success', 'Nama item diperbarui. Identitas penghitungan BMI tetap dipertahankan.');
+        }
         $data = $this->validated($request);
         DB::transaction(function () use ($data, $item, $request): void {
             McuCategory::whereIn('id', array_unique([$item->mcu_category_id, $data['mcu_category_id']]))->orderBy('id')->lockForUpdate()->get();

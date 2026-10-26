@@ -21,7 +21,7 @@ export function initializeAnswerNotes(root) {
 export function calculateBmi(height, weight) {
     if (String(height).trim() === '' || String(weight).trim() === '') return null;
     const h = Number(height), w = Number(weight);
-    if (!Number.isFinite(h) || !Number.isFinite(w) || h <= 0 || w <= 0) return null;
+    if (!Number.isFinite(h) || !Number.isFinite(w) || h <= 0 || w <= 0 || h > 999 || w > 999) return null;
     const bmi = Math.round((w / ((h / 100) ** 2) + Number.EPSILON) * 100) / 100;
     if (!Number.isFinite(bmi)) return null;
     const category = bmi < 18.5 ? 'Berat Badan Kurang (Underweight)' : bmi < 23 ? 'Normal' : bmi < 25 ? 'Kelebihan Berat Badan (Overweight)' : bmi < 30 ? 'Obesitas I' : 'Obesitas II';

@@ -7,7 +7,7 @@
     <h2 class="text-xl font-bold">{{ $category->exists ? 'Ubah kategori' : 'Kategori baru' }}</h2>
     @if($category->isProtected())<p class="rounded-xl bg-blue-50 p-4 text-sm">Kategori bawaan dapat diedit, termasuk label, QR/barcode, status, dan import data. Kategori tetap tidak dapat dihapus; paket dan hasil lama tidak berubah.</p>@endif
     @include('mcu.field', ['field' => 'name', 'label' => 'Nama kategori (wajib)', 'value' => $category->name])
-    @if(!$category->isProtected())<fieldset class="grid gap-3 rounded-xl border border-slate-200 p-4">
+    <fieldset class="grid gap-3 rounded-xl border border-slate-200 p-4">
         <legend class="px-2 text-sm font-semibold">Dokter penanggung jawab</legend>
         <div class="flex flex-wrap gap-3">
             @foreach(['1' => 'YA', '0' => 'TIDAK'] as $choice => $label)
@@ -17,7 +17,6 @@
         <p class="text-xs text-slate-500">YA menampilkan pilihan Dokter Pemeriksa pada kategori pemeriksaan pasien. Pengaturan paket dan hasil lama tidak berubah.</p>
         @error('has_responsible_doctor')<p class="text-sm text-red-700">{{ $message }}</p>@enderror
     </fieldset>
-    @else <input type="hidden" name="has_responsible_doctor" value="0"> @endif
     @include('mcu.masters.category-label-settings')
     @include('mcu.field', ['field' => 'import_enabled', 'label' => 'Import Data', 'type' => 'select', 'value' => $category->import_enabled ? '1' : '0', 'options' => ['0' => 'Nonaktif', '1' => 'Aktif']])
     <p class="text-xs text-slate-500">Jika aktif, Dokter dan Master Admin dapat mengimpor hasil kategori ini dari kunjungan MCU. Petugas tidak memiliki akses.</p>

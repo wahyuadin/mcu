@@ -65,6 +65,9 @@ class MasterBulkDeleteController extends Controller
                     if ($record instanceof McuCategory && $record->isProtected()) {
                         return ['name' => $name, 'deleted' => false, 'reason' => 'Kategori bawaan tidak dapat dihapus.'];
                     }
+                    if ($record instanceof McuItem && $record->isBmiMeasurement()) {
+                        return ['name' => $name, 'deleted' => false, 'reason' => 'Item tinggi dan berat badan untuk BMI tidak dapat dihapus.'];
+                    }
                     if ($record instanceof McuCategory && $record->subcategories()->exists()) {
                         return ['name' => $name, 'deleted' => false, 'reason' => 'Kategori masih memiliki subkategori. Hapus atau pindahkan subkategori terlebih dahulu.'];
                     }

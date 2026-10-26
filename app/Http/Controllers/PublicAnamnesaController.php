@@ -144,7 +144,7 @@ class PublicAnamnesaController extends Controller
                 $data = $request->validate($rules);
                 $data['answers'] = array_map(fn (array $answer): array => array_replace(['note' => null], $answer), $data['answers'] ?? []);
                 foreach ($data['answers'] as $key => &$answer) {
-                    if ($definitions[$key]['type'] === 'choice' && ($answer['answer'] ?? null) !== 'Ya') {
+                    if ($definitions[$key]['type'] !== 'choice' || ($answer['answer'] ?? null) !== 'Ya') {
                         $answer['note'] = null;
                     }
                 }

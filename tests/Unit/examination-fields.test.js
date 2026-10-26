@@ -4,7 +4,9 @@ import { calculateBmi, initializeAnswerNotes, initializeBmi } from '../../resour
 
 test('BMI matches server rounding and category thresholds and rejects incomplete values', () => {
     assert.deepEqual(calculateBmi('170', '65'), { bmi: 22.49, category: 'Normal' });
-    for (const value of ['', ' ', 'abc', '0', '-1', 'Infinity']) assert.equal(calculateBmi(value, '65'), null);
+    for (const value of ['', ' ', 'abc', '0', '-1', 'Infinity', '1000']) assert.equal(calculateBmi(value, '65'), null);
+    assert.equal(calculateBmi('160', '1000'), null);
+    assert.deepEqual(calculateBmi('160', '60'), { bmi: 23.44, category: 'Kelebihan Berat Badan (Overweight)' });
     assert.equal(calculateBmi('170', ''), null);
     for (const [weight, category] of [[18.49, 'Berat Badan Kurang (Underweight)'], [18.5, 'Normal'], [23, 'Kelebihan Berat Badan (Overweight)'], [25, 'Obesitas I'], [30, 'Obesitas II']]) {
         assert.equal(calculateBmi(100, weight).category, category);

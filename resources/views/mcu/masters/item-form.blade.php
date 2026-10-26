@@ -2,6 +2,16 @@
 @section('title', $item->exists ? 'Ubah Item MCU' : 'Tambah Item MCU')
 @section('content')
 <div class="mx-auto max-w-4xl">
+    @if($item->exists && $item->isBmiMeasurement())
+        <form method="POST" action="{{ route('mcu-item.update', $item) }}" class="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6">
+            @csrf @method('PUT')
+            <a href="{{ route('mcu-item.index', ['category' => $item->mcu_category_id]) }}" class="text-sm font-semibold text-slate-500">← Master item</a>
+            <h2 class="text-xl font-bold">Ubah nama item BMI</h2>
+            <p class="rounded-xl bg-blue-50 p-4 text-sm text-blue-900">Item bawaan BMI tidak dapat dihapus atau diubah konfigurasinya. Hanya nama item yang dapat diedit; satuan tetap {{ $item->legacy_key === 'tinggi_badan' ? 'cm' : 'kg' }}.</p>
+            @include('mcu.field', ['field' => 'label', 'label' => 'Nama item', 'value' => $item->label])
+            <button class="justify-self-start rounded-xl bg-[#00008B] px-5 py-3 font-semibold text-white">Simpan nama item</button>
+        </form>
+    @else
     <form data-master-item-form data-form-builder method="POST" action="{{ $item->exists ? route('mcu-item.update', $item) : route('mcu-item.store') }}" class="grid gap-5">
         @csrf @if($item->exists) @method('PUT') @endif
         <div class="flex flex-wrap items-center justify-between gap-3"><a href="{{ route('mcu-item.index', ['category' => $item->mcu_category_id]) }}" class="text-sm font-semibold text-slate-500">← Master item</a><button type="button" data-builder-preview-toggle aria-pressed="false" class="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-[#00008B]">Pratinjau form</button></div>
@@ -35,5 +45,6 @@
         <template data-builder-template>@include('mcu.masters.question-card', ['question' => ['input_type' => 'radio', 'is_required' => true, 'is_active' => true], 'index' => 0, 'primary' => false])</template>
     </form>
     @include('mcu.masters.item-order-modal')
+    @endif
 </div>
 @endsection

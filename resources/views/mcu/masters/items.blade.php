@@ -17,7 +17,7 @@
                 <tbody class="divide-y divide-slate-100">
                     @forelse($items as $item)
                         <tr class="hover:bg-blue-50/30">
-                            @include('mcu.master-select-row', ['selectionId' => $item->id, 'selectionName' => $item->label])
+                            @if($item->isBmiMeasurement())<td class="px-5 py-4 text-xs text-slate-500">Dilindungi</td>@else @include('mcu.master-select-row', ['selectionId' => $item->id, 'selectionName' => $item->label]) @endif
                             <th scope="row" class="max-w-64 px-5 py-4 align-top"><span class="block break-words font-semibold text-slate-800">{{ $item->label }}</span><span class="mt-1 block text-xs font-normal text-slate-500">Urutan {{ $item->sort_order }}</span></th>
                             <td class="max-w-56 break-words px-5 py-4 align-top text-slate-600">{{ $item->category->name }}@if($item->subcategory)<span class="mt-1 block text-xs font-semibold">{{ $item->subcategory->name }}</span>@endif</td>
                             <td class="max-w-48 px-5 py-4 align-top text-slate-600">{{ $item->inputLabel() }}</td>
@@ -26,7 +26,7 @@
                             </td>
                             <td class="px-5 py-4 align-top text-slate-600">{{ $item->is_required ? 'Wajib' : 'Opsional' }}</td>
                             <td class="px-5 py-4 align-top"><span class="whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold {{ $item->is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500' }}">{{ $item->is_active ? 'Aktif' : 'Nonaktif' }}</span></td>
-                            <td class="px-5 py-4 text-right align-top">@include('mcu.master-actions', ['compact' => true, 'name' => $item->label, 'editUrl' => route('mcu-item.edit', $item), 'deleteUrl' => route('mcu-item.destroy', $item)])</td>
+                            <td class="px-5 py-4 text-right align-top">@include('mcu.master-actions', ['compact' => true, 'name' => $item->label, 'editUrl' => route('mcu-item.edit', $item), 'deleteUrl' => $item->isBmiMeasurement() ? null : route('mcu-item.destroy', $item)])</td>
                         </tr>
                     @empty<tr><td colspan="8" class="px-6 py-12 text-center text-slate-500">{{ $search !== '' ? 'Tidak ada item yang cocok dengan pencarian.' : 'Belum ada item di kategori ini.' }}</td></tr>@endforelse
                 </tbody>

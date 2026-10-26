@@ -94,7 +94,7 @@ class CategoryResults
                     default => $hint,
                 };
                 $columns[$key] ??= $item['label'].' ['.$hint.']';
-                if ($item['storage'] !== 'physical') {
+                if ($item['type'] === 'radio') {
                     $columns['note:'.$key] ??= 'Catatan '.$item['label'].($item['type'] === 'radio' ? ' [opsional jika Ya]' : ' [opsional]');
                 }
             }
@@ -204,8 +204,8 @@ class CategoryResults
 
                         continue;
                     }
-                    if ($isNote && $item['storage'] === 'physical') {
-                        $errors[] = 'Kolom catatan ini tidak tersedia pada snapshot fisik lama.';
+                    if ($isNote && $item['type'] !== 'radio') {
+                        $errors[] = 'Catatan hanya tersedia untuk jawaban Ya/Tidak.';
 
                         continue;
                     }

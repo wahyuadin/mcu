@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use OwenIt\Auditing\Auditable as AuditableTrait;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -21,6 +22,25 @@ class McuItem extends Model implements Auditable
     protected function casts(): array
     {
         return ['lab_config' => 'array', 'allow_attachment' => 'boolean', 'is_required' => 'boolean', 'is_active' => 'boolean', 'sort_order' => 'integer'];
+    }
+
+    public function isBmiMeasurement(): bool
+    {
+        return in_array($this->getRawOriginal('legacy_key') ?? $this->legacy_key, ['tinggi_badan', 'berat_badan'], true);
+    }
+
+    protected static function booted(): void
+    {
+        static::updating(function (McuItem $item): void {
+            if ($item->isBmiMeasurement() && array_diff(array_keys($item->getDirty()), ['label', 'updated_at']) !== []) {
+                throw ValidationException::withMessages(['item' => 'Item tinggi dan berat badan hanya dapat diubah namanya.']);
+            }
+        });
+        static::deleting(function (McuItem $item): void {
+            if ($item->isBmiMeasurement()) {
+                throw ValidationException::withMessages(['item' => 'Item tinggi dan berat badan untuk BMI tidak dapat dihapus.']);
+            }
+        });
     }
 
     public function category(): BelongsTo

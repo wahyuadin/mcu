@@ -2,12 +2,34 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { test } from 'node:test';
+import { initializeBmi } from '../../resources/js/examination-fields.js';
 
 const source = readFileSync(
   new URL('../../resources/js/examination-navigation.js', import.meta.url),
   'utf8'
 ).replace('export function', 'function');
 const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+test('dirty tracking never overwrites realtime BMI and category from dynamic measurements', () => {
+  const f = fixture();
+  const height = { value: '160', addEventListener(type, fn) { this.update = fn; } };
+  const weight = { value: '60', addEventListener(type, fn) { this.update = fn; } };
+  const output = { closest: () => form };
+  const form = {
+    owner: f.root,
+    elements: { namedItem: () => null },
+    querySelector: (selector) => selector === '[data-bmi]' ? output : selector.includes('tinggi_badan') ? height : selector.includes('berat_badan') ? weight : null,
+  };
+  initializeBmi({ querySelectorAll: () => [output] });
+  f.document.dispatchEvent({ type: 'input', target: { closest: () => form } });
+  assert.equal(output.textContent, '23.44 · Kelebihan Berat Badan (Overweight)');
+  weight.value = '50'; weight.update();
+  f.document.dispatchEvent({ type: 'input', target: { closest: () => form } });
+  assert.equal(output.textContent, '19.53 · Normal');
+  height.value = ''; height.update();
+  f.document.dispatchEvent({ type: 'input', target: { closest: () => form } });
+  assert.equal(output.textContent, 'Belum dapat dihitung');
+});
 
 function fixture() {
   const docEvents = new Map();
