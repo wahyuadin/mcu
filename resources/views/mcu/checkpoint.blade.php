@@ -41,7 +41,7 @@
 <body>
     <div class="controls"><a href="{{ $checkpoint['identityUrl'] }}">← Identitas pasien</a><button type="button" onclick="window.print()">Cetak / Simpan PDF</button><p>A5 landscape (210 × 148 mm) · skala 100% · margin tidak ada · nonaktifkan header/footer browser.</p></div>
     <main class="preview"><div class="sheet"><article class="checkpoint-card" aria-label="Kartu checkpoint pasien">
-        <img class="logo" src="{{ asset('template/assets/logo.png') }}" alt="Nayaka">
+        <img class="logo" src="{{ asset('Template/assets/logo.png') }}" alt="Nayaka">
         <div class="identity">
             @if($peserta->hasStoredPhoto())<img class="photo" src="{{ route('pemeriksaan.attachment', [$kunjungan, $peserta, 'foto', 'v' => hash('sha256', $peserta->foto)]) }}" alt="Foto pasien">@else<div class="photo photo-placeholder">Foto pasien</div>@endif
             <div><h1 class="name">{{ $peserta->nama_karyawan }}</h1><dl class="details">

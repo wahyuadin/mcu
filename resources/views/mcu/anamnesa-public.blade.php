@@ -16,7 +16,7 @@
             </p>
         </noscript>
         <header class="grid gap-4 rounded-xl border border-slate-200 border-t-8 border-t-blue-900 bg-white p-6 sm:p-8">
-            <div class="flex items-center justify-between gap-6"><img src="{{ asset('template/assets/logo.png') }}"
+            <div class="flex items-center justify-between gap-6"><img src="{{ asset('Template/assets/logo.png') }}"
                     alt="Nayaka Era Husada" class="h-12 w-36 object-contain">
                 @if ($kunjungan->perusahaan->logo_path)
                     <img src="{{ route('anamnesa.logo', $token) }}"

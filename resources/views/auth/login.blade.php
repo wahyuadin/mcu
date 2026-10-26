@@ -27,7 +27,7 @@
             </section>
             <section class="flex flex-col justify-center bg-slate-50/50 p-8 sm:p-10 lg:col-span-3 lg:p-14 xl:p-16">
                 <div class="mb-10 flex items-center justify-between lg:hidden">
-                    <img src="{{ asset('template/assets/logo.png') }}" alt="Nayaka" class="h-10 w-auto object-contain">
+                    <img src="{{ asset('Template/assets/logo.png') }}" alt="Nayaka" class="h-10 w-auto object-contain">
                     <div class="flex h-1 w-16 overflow-hidden rounded-full"><div class="w-1/3 bg-[#FF8C00]"></div><div class="w-1/3 bg-[#00008B]"></div><div class="w-1/3 bg-[#008000]"></div></div>
                 </div>
                 <div class="mx-auto w-full max-w-sm">
