@@ -5,8 +5,18 @@ export function moveOrderItem(items, from, to) {
     return result;
 }
 
+export function moveFilteredOrderItem(items, subcategory, from, to) {
+    if (!subcategory) return moveOrderItem(items, from, to);
+    const matches = (item) => (item.subcategory_id ?? '__none') === subcategory;
+    const moved = moveOrderItem(items.filter(matches), from, to);
+    let index = 0;
+    return items.map((item) => matches(item) ? moved[index++] : item);
+}
+
 export function setupItemOrderModal(dialog, root = document) {
     const category = dialog.querySelector('[data-item-order-category]');
+    const subcategory = dialog.querySelector('[data-item-order-subcategory]');
+    const visibleItems = () => items.filter((item) => !subcategory?.value || (item.subcategory_id ?? '__none') === subcategory.value);
     const noun = category.dataset?.orderNoun ?? (category.hidden ? 'kategori' : 'item');
     const board = dialog.querySelector('[data-item-order-board]');
     const status = dialog.querySelector('[data-item-order-status]');
@@ -35,7 +45,8 @@ export function setupItemOrderModal(dialog, root = document) {
 
     const render = (focusId = null, direction = null) => {
         board.replaceChildren();
-        items.forEach((item, index) => {
+        const visible = visibleItems();
+        visible.forEach((item, index) => {
             const card = root.createElement('li');
             card.dataset.orderItem = item.id;
             card.draggable = !saving;
@@ -65,7 +76,7 @@ export function setupItemOrderModal(dialog, root = document) {
                 button.textContent = move === 'up' ? '↑' : '↓';
                 button.setAttribute('aria-label', `${move === 'up' ? 'Naikkan' : 'Turunkan'} ${item.label}`);
                 button.className = 'h-11 w-11 rounded-lg border border-slate-300 bg-white font-bold text-slate-600 disabled:opacity-30';
-                button.disabled = saving || (move === 'up' ? index === 0 : index === items.length - 1);
+                button.disabled = saving || (move === 'up' ? index === 0 : index === visible.length - 1);
                 actions.append(button);
                 if (focusId === item.id && direction === move) queueMicrotask(() => {
                     if (!button.disabled) button.focus();
@@ -85,6 +96,10 @@ export function setupItemOrderModal(dialog, root = document) {
         version = null;
         dirty = false;
         loadedCategory = category.value;
+        if (subcategory) {
+            subcategory.replaceChildren(new Option('Semua subkategori', ''));
+            subcategory.disabled = true;
+        }
         url = category.selectedOptions[0]?.dataset.url ?? null;
         render();
         if (!url) {
@@ -99,6 +114,11 @@ export function setupItemOrderModal(dialog, root = document) {
             const data = await response.json();
             if (current !== requestId || !dialog.open || closing) return;
             items = data.items;
+            if (subcategory) {
+                (data.subcategories ?? []).forEach((group) => subcategory.append(new Option(group.name, group.id)));
+                if (items.some((item) => !item.subcategory_id)) subcategory.append(new Option('Tanpa subkategori', '__none'));
+                subcategory.disabled = false;
+            }
             version = data.version;
             status.textContent = items.length ? `${data.category} · ${items.length} ${noun}. Urutan dibaca dari atas ke bawah.` : (noun === 'kategori' ? 'Belum ada kategori MCU.' : `Belum ada ${noun} dalam kategori ini.`);
             render();
@@ -143,11 +163,16 @@ export function setupItemOrderModal(dialog, root = document) {
         }
         load();
     });
+    subcategory?.addEventListener('change', () => {
+        render();
+        status.textContent = `${visibleItems().length} ${noun} ditampilkan. Urutan item di luar filter tetap dipertahankan.`;
+    });
 
     const move = (from, to, focusId = null, direction = null) => {
-        if (saving || from === to || from < 0 || to < 0 || to >= items.length) return;
-        const label = items[from].label;
-        items = moveOrderItem(items, from, to);
+        const visible = visibleItems();
+        if (saving || from === to || from < 0 || to < 0 || to >= visible.length) return;
+        const label = visible[from].label;
+        items = moveFilteredOrderItem(items, subcategory?.value, from, to);
         dirty = true;
         render(focusId, direction);
         status.textContent = `${label} dipindahkan ke posisi ${to + 1}. Belum disimpan.`;
@@ -156,7 +181,7 @@ export function setupItemOrderModal(dialog, root = document) {
         const button = event.target.closest('[data-order-move]');
         if (!button || button.disabled) return;
         const id = button.closest('[data-order-item]').dataset.orderItem;
-        const from = items.findIndex((item) => item.id === id);
+        const from = visibleItems().findIndex((item) => item.id === id);
         move(from, from + (button.dataset.orderMove === 'up' ? -1 : 1), id, button.dataset.orderMove);
     });
     board.addEventListener('dragstart', (event) => {
@@ -176,8 +201,8 @@ export function setupItemOrderModal(dialog, root = document) {
         event.preventDefault();
         const target = event.target.closest('[data-order-item]');
         if (!target || !draggedId || target.dataset.orderItem === draggedId || saving) return;
-        const from = items.findIndex((item) => item.id === draggedId);
-        let to = items.findIndex((item) => item.id === target.dataset.orderItem);
+        const from = visibleItems().findIndex((item) => item.id === draggedId);
+        let to = visibleItems().findIndex((item) => item.id === target.dataset.orderItem);
         const bounds = target.getBoundingClientRect();
         if (event.clientY > bounds.top + bounds.height / 2) to++;
         if (from < to) to--;
@@ -193,6 +218,7 @@ export function setupItemOrderModal(dialog, root = document) {
         if (saving || !dirty || !version || !url) return;
         saving = true;
         category.disabled = true;
+        if (subcategory) subcategory.disabled = true;
         dialog.querySelectorAll('[data-item-order-close]').forEach((button) => { button.disabled = true; });
         render();
         status.textContent = 'Menyimpan urutan…';
@@ -209,6 +235,7 @@ export function setupItemOrderModal(dialog, root = document) {
         } finally {
             saving = false;
             category.disabled = false;
+            if (subcategory) subcategory.disabled = false;
             dialog.querySelectorAll('[data-item-order-close]').forEach((button) => { button.disabled = false; });
             render();
         }

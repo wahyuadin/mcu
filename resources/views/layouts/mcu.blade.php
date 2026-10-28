@@ -15,7 +15,7 @@
             class="fixed inset-y-0 left-0 z-50 mt-1.5 flex w-72 -translate-x-full flex-col overflow-hidden border-r border-slate-200/70 bg-white shadow-2xl shadow-slate-900/10 transition-transform duration-300 lg:static lg:z-40 lg:translate-x-0 lg:shadow-none">
             <div class="flex h-20 shrink-0 items-center justify-between border-b border-slate-100 px-6 lg:px-8">
                 <a href="{{ route('dashboard') }}" class="flex items-center gap-3"><img
-                        src="{{ asset('Template/assets/logo.png') }}" alt="Nayaka"
+                        src="{{ asset('template/assets/logo.png') }}" alt="Nayaka"
                         class="h-10 w-auto object-contain"></a>
                 <button type="button" id="close-sidebar"
                     class="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 lg:hidden"

@@ -19,7 +19,8 @@ class McuItemOrderController extends Controller
         return response()->json([
             'category' => $category->name,
             'version' => $this->version($items),
-            'items' => $items->map(fn (McuItem $item): array => ['id' => $item->id, 'label' => $item->label, 'type' => $item->inputLabel(), 'is_active' => $item->is_active])->values(),
+            'subcategories' => $category->subcategories()->get(['id', 'name']),
+            'items' => $items->map(fn (McuItem $item): array => ['id' => $item->id, 'label' => $item->label, 'type' => $item->inputLabel(), 'is_active' => $item->is_active, 'subcategory_id' => $item->mcu_subcategory_id])->values(),
         ])->header('Cache-Control', 'no-store, private');
     }
 

@@ -19,7 +19,7 @@
 
     <main class="document" data-mcu-report aria-label="Laporan Medical Check Up Nayaka DKI">
         <article class="report-page cover" data-cover aria-label="Sampul laporan">
-            <img class="cover-art" src="{{ asset('Template/assets/report-cover.png') }}" alt="Kop dan sampul laporan Nayaka Era Husada DKI Jakarta">
+            <img class="cover-art" src="{{ asset('template/assets/report-cover.png') }}" alt="Kop dan sampul laporan Nayaka Era Husada DKI Jakarta">
             <div class="cover-details">
                 <dl class="cover-info">
                     @foreach(['Perusahaan' => $peserta->perusahaan->nama_perusahaan, 'Nama' => $peserta->nama_karyawan, 'NIK KTP' => $peserta->nik, 'NIP' => $peserta->nip] as $label => $value)

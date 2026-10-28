@@ -32,6 +32,8 @@
     <p class="text-xs text-slate-500">○ Belum diisi · ● Draft · ✓ Selesai. Kosong bukan berarti normal.@if(!$hrdReadonly) Pengisian dapat dilakukan dalam urutan apa pun.@endif</p>
     @endif
 
+    @include('mcu.loading-skeleton')
+    <div data-examination-body class="grid min-w-0 gap-6">
     @if($importCategory)
         <section class="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-indigo-200 bg-indigo-50 p-5">
             <div><h3 class="font-bold text-indigo-950">Import {{ $importCategory->name }}</h3><p class="mt-1 text-sm text-indigo-900">Untuk seluruh peserta kunjungan ini sesuai paket masing-masing, bukan hanya peserta yang sedang dibuka.</p></div>
@@ -119,6 +121,7 @@
             <button class="rounded-xl bg-[#00008B] px-4 py-3 text-sm font-semibold text-white">Tambah dokter</button>
         </form></details>@endcan
     @endif
+    </div>
 </div>
 @can('import-category-results') @include('mcu.category-import-modal') @endcan
 @endsection

@@ -4,7 +4,14 @@ export function setupExaminationNavigation(document, window) {
   const notice = document.createElement('p');
   notice.setAttribute('role', 'status');
   notice.setAttribute('aria-live', 'polite');
+  notice.hidden = true;
   root.before(notice);
+  const loading = (busy) => {
+    const skeleton = root.querySelector('[data-loading-skeleton]');
+    const body = root.querySelector('[data-examination-body]');
+    if (skeleton) skeleton.hidden = !busy;
+    if (body) { body.hidden = busy; body.inert = busy; }
+  };
   let currentUrl = window.location.href;
   let currentIndex = 0;
   let restoringHistory = false;
@@ -32,7 +39,9 @@ export function setupExaminationNavigation(document, window) {
     const id = ++sequence;
     const version = draftVersion;
     const timeout = window.setTimeout(() => request.abort(), 30000);
-    notice.textContent = 'Memuat bagian pemeriksaan…';
+    notice.textContent = '';
+    notice.hidden = true;
+    loading(true);
     root.setAttribute('aria-busy', 'true');
     try {
       const response = await window.fetch(url, {
@@ -80,9 +89,10 @@ export function setupExaminationNavigation(document, window) {
         document
           .getElementById?.(decodeURIComponent(target.hash.slice(1)))
           ?.scrollIntoView({ block: 'start' });
-      notice.textContent = 'Bagian pemeriksaan diperbarui.';
+      notice.textContent = '';
     } catch (error) {
       if (id !== sequence) return;
+      notice.hidden = false;
       notice.textContent =
         error.name === 'AbortError'
           ? 'Pemuatan dibatalkan atau terlalu lama. Klik tab untuk mencoba lagi.'
@@ -90,7 +100,7 @@ export function setupExaminationNavigation(document, window) {
       if (popIndex !== null) restoreHistory(popIndex);
     } finally {
       window.clearTimeout(timeout);
-      if (id === sequence) root.removeAttribute('aria-busy');
+      if (id === sequence) { root.removeAttribute('aria-busy'); loading(false); }
       if (
         id === sequence &&
         popIndex !== null &&
@@ -138,6 +148,7 @@ export function setupExaminationNavigation(document, window) {
     draftVersion++;
     controller?.abort();
     notice.textContent = 'Ada perubahan yang belum disimpan.';
+    notice.hidden = false;
     const status = form.querySelector('[data-save-status]');
     if (status) status.textContent = 'Ada perubahan yang belum disimpan';
   };

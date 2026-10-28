@@ -15,6 +15,7 @@ use App\Models\Paket;
 use App\Models\RencanaKunjungan;
 use App\ParticipantAnamnesaForm;
 use App\PatientPhoto;
+use Endroid\QrCode\Encoding\Encoding;
 use Endroid\QrCode\ErrorCorrectionLevel;
 use Endroid\QrCode\QrCode;
 use Endroid\QrCode\Writer\SvgWriter;
@@ -35,6 +36,13 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class PemeriksaanController extends Controller
 {
     public function __construct(private MedicalImage $images) {}
+
+    public function scan(Karyawan $peserta): RedirectResponse
+    {
+        abort_unless($peserta->rencanaKunjungan, 404);
+
+        return redirect()->route('pemeriksaan.edit', [$peserta->rencanaKunjungan, $peserta]);
+    }
 
     public function edit(Request $request, RencanaKunjungan $kunjungan, Karyawan $peserta): View|Response|RedirectResponse
     {
@@ -202,8 +210,8 @@ class PemeriksaanController extends Controller
     private function checkpointData(RencanaKunjungan $kunjungan, Karyawan $peserta, Anamnesa $exam): array
     {
         $identityUrl = route('pemeriksaan.edit', [$kunjungan, $peserta, 'tab' => 'identitas']);
-        $scanUrl = route('pemeriksaan.scan', [$kunjungan, $peserta]);
-        $qr = new QrCode(data: $scanUrl, errorCorrectionLevel: ErrorCorrectionLevel::Medium, size: 320, margin: 24);
+        $scanUrl = route('pemeriksaan.qr', $peserta);
+        $qr = new QrCode(data: $scanUrl, encoding: new Encoding('ISO-8859-1'), errorCorrectionLevel: ErrorCorrectionLevel::Medium, size: 320, margin: 24);
         $progress = $exam->workflowProgress($peserta);
         $items = [];
         foreach (['anamnesa' => 'Anamnesa', 'fisik' => 'Fisik', 'laboratorium' => 'Laboratorium'] as $key => $label) {

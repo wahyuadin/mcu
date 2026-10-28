@@ -1,7 +1,7 @@
-@font-face { font-family: NayakaReport; src: url('../Template/assets/report-font-0.ttf') format('truetype'); font-weight: 400; font-display: block; }
-@font-face { font-family: NayakaReport; src: url('../Template/assets/report-font-1.ttf') format('truetype'); font-weight: 700; font-display: block; }
-@font-face { font-family: NayakaReport; src: url('../Template/assets/report-font-2.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: block; }
-@font-face { font-family: NayakaReport; src: url('../Template/assets/report-font-3.ttf') format('truetype'); font-weight: 700; font-style: italic; font-display: block; }
+@font-face { font-family: NayakaReport; src: url('../template/assets/report-font-0.ttf') format('truetype'); font-weight: 400; font-display: block; }
+@font-face { font-family: NayakaReport; src: url('../template/assets/report-font-1.ttf') format('truetype'); font-weight: 700; font-display: block; }
+@font-face { font-family: NayakaReport; src: url('../template/assets/report-font-2.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: block; }
+@font-face { font-family: NayakaReport; src: url('../template/assets/report-font-3.ttf') format('truetype'); font-weight: 700; font-style: italic; font-display: block; }
 :root { color-scheme: light; --navy: #1a365d; --ink: #2d3748; --muted: #4a5568; --line: #d7e1e9; }
 * { box-sizing: border-box; }
 body { margin: 0; padding: 24px 12px; background: #e9edf2; color: var(--ink); font-family: NayakaReport, Arial, sans-serif; font-size: 7.5pt; line-height: 1.25; }

@@ -19,3 +19,8 @@ import './dashboard';
 import './examination-navigation';
 import './examination-fields';
 import './category-result-import';
+import './modern-select';
+import './package-template';
+import './planning-workspace';
+import './patient-actions';
+import './patient-workspace';

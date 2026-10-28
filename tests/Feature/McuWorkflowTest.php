@@ -97,10 +97,10 @@ class McuWorkflowTest extends TestCase
         $this->put(route('pasien.update', $patient), ['nip' => 'EMP-001', 'tanggal_lahir' => '1990-01-01', 'bagian' => 'Operasional', 'rencana_kunjungan_id' => $visit->id, 'paket_id' => $package->id, 'nama_karyawan' => 'Siti Baru', 'jenis_kelamin' => 'P'])->assertRedirect();
         $this->assertSame('Siti Baru', $patient->fresh()->nama_karyawan);
         $this->delete(route('paket.destroy', $package))->assertSessionHasErrors('paket');
-        $this->delete(route('pasien.destroy', $patient))->assertRedirect(route('pasien.index'));
-        $this->assertSoftDeleted($patient);
-        $this->delete(route('paket.destroy', $package))->assertRedirect(route('paket.index'));
-        $this->assertSoftDeleted($package);
+        $this->delete(route('pasien.destroy', $patient))->assertSessionHasErrors('pasien');
+        $this->assertNotSoftDeleted($patient);
+        $this->delete(route('paket.destroy', $package))->assertSessionHasErrors('paket');
+        $this->assertNotSoftDeleted($package);
     }
 
     public function test_patient_can_reuse_package_from_another_visit_and_auto_bind_it_to_selected_visit(): void

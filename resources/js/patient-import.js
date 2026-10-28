@@ -11,6 +11,7 @@ export function setupPatientImport(dialog, root = document) {
     const search = dialog.querySelector('[data-patient-import-search]');
     const report = dialog.querySelector('[data-patient-import-report]');
     const drop = dialog.querySelector('[data-patient-import-drop]');
+    const alert = dialog.querySelector('[data-patient-import-alert]');
     let batch;
     let mappingDirty = false;
     const closers = dialog.querySelectorAll('[data-patient-import-close]');
@@ -18,6 +19,7 @@ export function setupPatientImport(dialog, root = document) {
     let animation;
     let closing = false;
     let submitting = false;
+    const canConfirm = () => batch && !mappingDirty && batch.status !== 'complete' && batch.stats.failed === 0 && batch.stats.ready > 0 && batch.can_confirm !== false;
 
     const fade = (from, to, exiting = false) => {
         animation?.cancel();
@@ -104,7 +106,7 @@ export function setupPatientImport(dialog, root = document) {
             const tr = document.createElement('tr');
             tr.append(text('td', row.number || '—', 'p-3 align-top'));
             const patient = text('td', row.data.nama_karyawan || '—', 'max-w-64 break-words p-3 align-top font-semibold');
-            patient.append(text('p', [row.data.nik, row.data.nip, row.data.jenis_kelamin, row.data.tanggal_lahir, row.data.tanggal_mcu].filter(Boolean).join(' · '), 'mt-1 text-xs font-normal text-slate-500'));
+            patient.append(text('p', [row.data.nik, row.data.nip, row.data.jenis_kelamin, row.data.tanggal_lahir].filter(Boolean).join(' · '), 'mt-1 text-xs font-normal text-slate-500'));
             const detail = document.createElement('details');
             detail.className = 'mt-2 text-xs font-normal text-slate-500';
             detail.append(text('summary', 'Detail data', 'cursor-pointer'));
@@ -114,8 +116,8 @@ export function setupPatientImport(dialog, root = document) {
             const placement = text('td', row.visit || row.data.kunjungan_id || '—', 'max-w-72 break-words p-3 align-top');
             placement.append(text('p', row.package || row.data.paket_id || '—', 'mt-1 text-xs text-slate-500'));
             tr.append(placement);
-            const result = text('td', ({ ready: 'Valid', failed: 'Bermasalah', succeeded: 'Berhasil', existing: 'Sudah diimport sebelumnya' })[row.status], 'max-w-96 break-words p-3 align-top');
-            result.append(text('p', row.nomor_mcu || row.errors.join(' '), `mt-1 text-xs ${row.status === 'failed' ? 'text-red-700' : 'text-emerald-700'}`));
+            const result = text('td', ({ ready: 'Valid', failed: 'Bermasalah', excluded: 'Tidak diikutkan · kapasitas penuh', succeeded: 'Berhasil', existing: 'Sudah diimport sebelumnya' })[row.status], 'max-w-96 break-words p-3 align-top');
+            result.append(text('p', row.nomor_mcu || row.errors.join(' '), `mt-1 text-xs ${row.status === 'failed' ? 'text-red-700' : row.status === 'excluded' ? 'text-amber-800' : 'text-emerald-700'}`));
             tr.append(result);
             body.append(tr);
         });
@@ -130,19 +132,22 @@ export function setupPatientImport(dialog, root = document) {
         dialog.querySelector('[data-patient-import-heading]').textContent = complete ? 'Hasil import' : 'Crosscheck data';
         const s = batch.stats;
         dialog.querySelector('[data-patient-import-summary]').textContent = complete
-            ? `${s.succeeded} pasien berhasil · ${s.failed} gagal · ${s.existing} sudah diimport sebelumnya. ${batch.file_error || 'Baris berhasil tidak perlu diupload ulang.'}`
-            : `${s.total} baris · ${s.ready} valid · ${s.failed} bermasalah · ${s.existing} sudah diimport. Belum ada pasien baru disimpan.`;
+            ? `${s.succeeded} pasien berhasil · ${s.failed} gagal · ${s.excluded ?? 0} tidak diikutkan · ${s.existing} sudah diimport sebelumnya. ${batch.file_error || 'Baris berhasil tidak perlu diupload ulang.'}`
+            : `${s.total} baris · ${s.ready} valid · ${s.failed} bermasalah · ${s.excluded ?? 0} tidak diikutkan karena kapasitas · ${s.existing} sudah diimport. Belum ada pasien baru disimpan.`;
+        alert.hidden = s.failed === 0;
         confirm.hidden = complete;
-        confirm.disabled = s.ready === 0;
+        confirm.disabled = !canConfirm();
         confirm.textContent = `Import ${s.ready} pasien valid`;
         dialog.querySelector('[data-patient-import-mapping-panel]').hidden = complete;
         mapping.replaceChildren();
         Object.entries(batch.mapping).forEach(([field, header]) => {
-            const label = text('label', field, 'grid gap-2 text-xs font-semibold');
+            const required = (batch.required_fields ?? []).includes(field);
+            const label = text('label', `${field} · ${required ? 'Wajib' : 'Opsional'}`, 'grid gap-2 text-xs font-semibold');
             const select = document.createElement('select');
             select.className = 'min-h-11 min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-sm';
             select.dataset.field = field;
-            const empty = text('option', 'Tidak dipetakan'); empty.value = ''; select.append(empty);
+            select.required = required;
+            const empty = text('option', required ? 'Pilih kolom sumber (wajib)' : 'Tidak dipetakan (opsional)'); empty.value = ''; select.append(empty);
             batch.headers.forEach((name) => { const option = text('option', name); option.value = name; select.append(option); });
             select.value = header ?? '';
             select.addEventListener('change', () => {
@@ -169,7 +174,7 @@ export function setupPatientImport(dialog, root = document) {
                 status.textContent += ' Jika unduhan tidak muncul, gunakan tombol Unduh hasil import .xlsx.';
             }
         } catch (error) { status.textContent = error.message || 'Koneksi gagal. Coba kembali; baris berhasil tidak akan dibuat ulang.'; }
-        finally { busy(false); if (batch) confirm.disabled = mappingDirty || batch.stats.ready === 0; }
+        finally { busy(false); confirm.disabled = !canConfirm(); }
     };
     form.addEventListener('submit', (event) => {
         event.preventDefault();
@@ -178,7 +183,7 @@ export function setupPatientImport(dialog, root = document) {
         const payload = new FormData(form);
         run(() => request(form.action, 'POST', payload));
     });
-    confirm.addEventListener('click', () => { if (batch && !mappingDirty && batch.stats.ready > 0) run(() => request(batch.confirm_url, 'POST', { version: batch.version })); });
+    confirm.addEventListener('click', () => { if (canConfirm()) run(() => request(batch.confirm_url, 'POST', { version: batch.version })); });
     mapSave.addEventListener('click', () => {
         if (!batch) return;
         const values = Object.fromEntries([...mapping.querySelectorAll('select')].map((select) => [select.dataset.field, select.value || null]));
@@ -188,14 +193,14 @@ export function setupPatientImport(dialog, root = document) {
     search.addEventListener('input', () => { if (batch) renderRows(); });
     window.addEventListener('pageshow', () => {
         busy(false);
-        if (batch) confirm.disabled = mappingDirty || batch.stats.ready === 0;
+        confirm.disabled = !canConfirm();
     });
     if (dialog.hasAttribute('data-open-on-load')) open(triggers[0]);
 }
 
 export function filterImportRows(rows, filter = 'all', query = '') {
     const needle = query.trim().toLocaleLowerCase('id');
-    return rows.filter((row) => (filter === 'all' || (filter === 'failed' ? row.status === 'failed' : row.status !== 'failed'))
+    return rows.filter((row) => (filter === 'all' || (filter === 'valid' ? ['ready', 'succeeded', 'existing'].includes(row.status) : row.status === filter))
         && (!needle || [row.number, ...Object.values(row.data), row.visit, row.package, row.nomor_mcu, ...row.errors].join(' ').toLocaleLowerCase('id').includes(needle)));
 }
 

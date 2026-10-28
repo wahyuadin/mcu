@@ -2,7 +2,7 @@
 @section('title', 'Rencana Kunjungan')
 @section('content')
     @php($statusLabels = ['draft' => 'Draft', 'ongoing' => 'Berlangsung', 'completed' => 'Selesai', 'closed' => 'Ditutup'])
-    <div class="mx-auto grid max-w-7xl gap-6">
+    <div data-planning-workspace class="mx-auto grid max-w-7xl gap-6">
         <section
             class="flex flex-wrap items-start justify-between gap-5 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
             <div class="min-w-0">
@@ -15,7 +15,7 @@
                 class="rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-800">+ Buat rencana
                 kunjungan</a>
         </section>
-        <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+        <div data-planning-stats class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
             @foreach (['total' => 'Total rencana'] + $statusLabels as $key => $label)
                 <a href="{{ $key === 'total' ? route('rencana-kunjungan.index') : route('rencana-kunjungan.index', ['status' => $key]) }}"
                     class="rounded-2xl border p-5 {{ request('status', 'total') === $key ? 'border-emerald-700 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-700' }}">
@@ -29,9 +29,9 @@
             <section class="grid min-w-0 gap-5 rounded-2xl border border-slate-200 bg-white p-6">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <h3 class="text-xl font-bold">Daftar rencana kunjungan</h3><span
-                        class="text-sm text-slate-500">{{ $kunjungans->total() }} rencana sesuai filter</span>
+                        data-planning-count class="text-sm text-slate-500">{{ $kunjungans->total() }} rencana sesuai filter</span>
                 </div>
-                <form method="GET" action="{{ route('rencana-kunjungan.index') }}" class="grid gap-3 sm:grid-cols-2">
+                <form data-planning-filter method="GET" action="{{ route('rencana-kunjungan.index') }}" class="grid gap-3 sm:grid-cols-2">
                     <input name="q" value="{{ request('q') }}" placeholder="Cari perusahaan, nomor, atau periode"
                         aria-label="Cari rencana kunjungan"
                         class="min-h-12 min-w-0 rounded-xl border border-slate-300 px-3 sm:col-span-2">
@@ -54,6 +54,7 @@
                         <button class="rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold">Cari</button>
                     </div>
                 </form>
+                <div data-planning-results>
                 @if (request('q') || request('status') || request('perusahaan'))
                     <a href="{{ route('rencana-kunjungan.index') }}"
                         class="justify-self-start text-xs font-semibold text-emerald-700">Hapus filter →</a>
@@ -70,7 +71,7 @@
                                         @include('mcu.company-icon')
                                     @endif
                                     <div class="min-w-0">
-                                    <h4 class="break-words font-bold">{{ $kunjungan->perusahaan->nama_perusahaan }}</h4>
+                                    <h4 class="break-words font-bold"><button type="button" data-planning-edit data-url="{{ route('rencana-kunjungan.update', $kunjungan) }}" data-plan="{{ json_encode(['perusahaan_id' => $kunjungan->perusahaan_id, 'nomor_kunjungan' => $kunjungan->nomor_kunjungan, 'periode_kunjungan' => $kunjungan->periode_kunjungan, 'tgl_mulai' => $kunjungan->tgl_mulai?->format('Y-m-d'), 'tgl_selesai' => $kunjungan->tgl_selesai?->format('Y-m-d'), 'jumlah_peserta_direncanakan' => $kunjungan->jumlah_peserta_direncanakan]) }}" @disabled($kunjungan->is_closing) aria-haspopup="dialog" aria-controls="planning-edit-modal" class="text-left underline decoration-dotted underline-offset-4 hover:text-emerald-700 disabled:cursor-not-allowed">{{ $kunjungan->perusahaan->nama_perusahaan }}</button></h4>
                                     <p class="mt-2 break-all text-xs text-slate-500">{{ $kunjungan->nomor_kunjungan }} ·
                                         {{ $kunjungan->periode_kunjungan }}</p>
                                     </div>
@@ -97,6 +98,9 @@
                     @endforelse
                 </div>
                 {{ $kunjungans->links() }}
+                </div>
+                @include('mcu.loading-skeleton')
+                <p data-planning-status role="status" class="text-sm text-slate-600"></p>
             </section>
 
             <div class="grid min-w-0 gap-6">
@@ -111,47 +115,7 @@
                                 href="{{ route('perusahaan.index') }}" class="font-semibold underline">{{ 'Daftarkan perusahaan terlebih dahulu.' }}</a></p>
                     @endif
                     <form data-planning-dates action="{{ route('rencana-kunjungan.store') }}" method="POST" class="grid gap-4">@csrf
-                        <label for="planning-company" class="grid gap-2 text-sm font-semibold">Perusahaan *<select
-                                id="planning-company" name="perusahaan_id" required
-                                class="min-h-12 min-w-0 rounded-xl border border-slate-300 bg-white px-3">
-                                <option value="">Pilih perusahaan</option>
-                                @foreach ($perusahaans as $company)
-                                    <option value="{{ $company->id }}" @selected(old('perusahaan_id') === $company->id)>
-                                        {{ $company->nama_perusahaan }}</option>
-                                @endforeach
-                            </select>
-                            @error('perusahaan_id')
-                                <span class="text-xs font-normal text-red-700">{{ $message }}</span>
-                            @enderror
-                        </label>
-                        @foreach (['nomor_kunjungan' => ['Nomor PKS *', 'Contoh: MCU-2026-001'], 'periode_kunjungan' => ['Periode kunjungan *', 'Contoh: Oktober 2026']] as $field => [$label, $placeholder])
-                            <label for="planning-{{ $field }}"
-                                class="grid gap-2 text-sm font-semibold">{{ $label }}<input
-                                    id="planning-{{ $field }}" name="{{ $field }}"
-                                     value="{{ old($field) }}" required maxlength="255"
-                                    placeholder="{{ $placeholder }}"
-                                    class="min-h-12 min-w-0 rounded-xl border border-slate-300 px-3">
-                                @error($field)
-                                    <span class="text-xs font-normal text-red-700">{{ $message }}</span>
-                                @enderror
-                            </label>
-                        @endforeach
-                        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-                            @foreach (['tgl_mulai' => 'Tanggal mulai pelaksanaan', 'tgl_selesai' => 'Tanggal selesai pelaksanaan'] as $field => $label)
-                                <label for="planning-{{ $field }}"
-                                    class="grid gap-2 text-sm font-semibold">{{ $label }}<input
-                                        id="planning-{{ $field }}" type="date" name="{{ $field }}"
-                                        value="{{ old($field, now()->addDays($field === 'tgl_selesai' ? 14 : 0)->format('Y-m-d')) }}"
-                                        class="min-h-12 min-w-0 rounded-xl border border-slate-300 px-3">
-                                    @error($field)
-                                        <span class="text-xs font-normal text-red-700">{{ $message }}</span>
-                                    @enderror
-                                </label>
-                            @endforeach
-                        </div>
-                        <p class="text-xs text-slate-500">Tanggal selesai otomatis 14 hari setelah tanggal mulai dan tetap dapat diedit.</p>
-                        <label class="grid gap-2 text-sm font-semibold">Jumlah peserta direncanakan *<input type="number" name="jumlah_peserta_direncanakan" value="{{ old('jumlah_peserta_direncanakan') }}" placeholder="Contoh: 529" min="1" max="1000000" required class="min-h-12 min-w-0 rounded-xl border border-slate-300 px-3">@error('jumlah_peserta_direncanakan')<span class="text-xs text-red-700">{{ $message }}</span>@enderror</label>
-                        <p class="text-xs text-slate-500">Target peserta untuk ringkasan dashboard, bukan batas kuota pendaftaran.</p>
+                        @include('mcu.planning-fields', ['editingPlan' => false])
                         <button @disabled($perusahaans->isEmpty())
                             class="rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300">Simpan
                             rencana kunjungan</button>
@@ -170,4 +134,12 @@
             </div>
         </div>
     </div>
+    <dialog id="planning-edit-modal" data-planning-modal aria-labelledby="planning-edit-title" class="mcu-modal m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-2xl border-0 bg-white p-6 shadow-xl">
+        <div class="mb-5 flex items-center justify-between gap-3"><h2 id="planning-edit-title" class="text-xl font-bold">Edit rencana kunjungan</h2><button type="button" data-planning-close autofocus class="min-h-11 rounded-xl border border-slate-300 px-4">Tutup</button></div>
+        <form data-planning-edit-form data-planning-dates method="POST" class="grid gap-4">@csrf @method('PUT')
+            @include('mcu.planning-fields', ['editingPlan' => true])
+            <p data-planning-errors role="alert" tabindex="-1" class="text-sm text-red-700"></p>
+            <div class="flex justify-end gap-3"><button type="button" data-planning-close class="min-h-12 rounded-xl border border-slate-300 px-5">Batal</button><button data-planning-save class="min-h-12 rounded-xl bg-emerald-700 px-5 font-bold text-white disabled:opacity-50">Simpan perubahan</button></div>
+        </form>
+    </dialog>
 @endsection

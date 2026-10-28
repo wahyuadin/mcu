@@ -17,6 +17,7 @@ use App\Http\Controllers\McuSubcategoryOrderController;
 use App\Http\Controllers\PaketController;
 use App\Http\Controllers\ParticipantReleaseController;
 use App\Http\Controllers\PasienController;
+use App\Http\Controllers\PatientIdentityController;
 use App\Http\Controllers\PatientImportController;
 use App\Http\Controllers\PemeriksaanController;
 use App\Http\Controllers\ProfileController;
@@ -76,6 +77,8 @@ Route::middleware('auth')->group(function (): void {
     Route::middleware('can:view-patients')->group(function (): void {
         Route::get('/perusahaan/{perusahaan}/logo', [McuController::class, 'perusahaanLogo'])->name('perusahaan.logo');
         Route::get('/pasien', [PasienController::class, 'index'])->name('pasien.index');
+        Route::get('/pasien/identitas/{identity}', [PatientIdentityController::class, 'show'])->name('pasien.identity.show');
+        Route::get('/pasien/identitas/{identity}/foto', [PatientIdentityController::class, 'photo'])->name('pasien.identity.photo');
         Route::get('/pasien/{pasien}', [PasienController::class, 'show'])->whereUuid('pasien')->name('pasien.show');
         Route::get('/laporan-riwayat', [LaporanRiwayatController::class, 'index'])->name('laporan-riwayat.index');
         Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/laporan-riwayat', [LaporanRiwayatController::class, 'show'])->name('pemeriksaan.laporan-riwayat');
@@ -94,6 +97,7 @@ Route::middleware('auth')->group(function (): void {
         Route::put('/perusahaan/{perusahaan}/logo', [McuController::class, 'updatePerusahaanLogo'])->name('perusahaan.logo.update');
         Route::get('/rencana-kunjungan', [McuController::class, 'kunjungans'])->name('rencana-kunjungan.index');
         Route::post('/rencana-kunjungan', [McuController::class, 'storeKunjungan'])->name('rencana-kunjungan.store');
+        Route::put('/rencana-kunjungan/{kunjungan}', [McuController::class, 'updateKunjungan'])->name('rencana-kunjungan.update');
         Route::get('/rencana-kunjungan/{kunjungan}', [McuController::class, 'planningShow'])->name('rencana-kunjungan.show');
         Route::post('/rencana-kunjungan/{kunjungan}/paket', [McuController::class, 'bindPackage'])->name('rencana-kunjungan.paket.bind');
         Route::delete('/rencana-kunjungan/{kunjungan}/paket/{paket}', [McuController::class, 'unbindPackage'])->name('rencana-kunjungan.paket.unbind');
@@ -113,8 +117,12 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/master-item-mcu/hapus-terpilih', [MasterBulkDeleteController::class, 'items'])->name('mcu-item.bulk-destroy');
         Route::resource('master-item-mcu', McuItemController::class)->names('mcu-item')->parameters(['master-item-mcu' => 'item'])->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
         Route::post('/paket/hapus-terpilih', [MasterBulkDeleteController::class, 'packages'])->name('paket.bulk-destroy');
+        Route::get('/paket/{paket}/template', [PaketController::class, 'template'])->name('paket.template');
         Route::resource('paket', PaketController::class)->parameters(['paket' => 'paket']);
         Route::get('/pasien/create', [PasienController::class, 'create'])->name('pasien.create');
+        Route::get('/pasien/identitas/{identity}/edit', [PatientIdentityController::class, 'edit'])->name('pasien.identity.edit');
+        Route::put('/pasien/identitas/{identity}', [PatientIdentityController::class, 'update'])->name('pasien.identity.update');
+        Route::delete('/pasien/identitas/{identity}', [PatientIdentityController::class, 'destroy'])->name('pasien.identity.destroy');
         Route::get('/pasien/import/template', [PatientImportController::class, 'template'])->name('pasien.import.template');
         Route::post('/pasien/import', [PatientImportController::class, 'store'])->middleware('throttle:10,1,patient-import')->name('pasien.import.store');
         Route::get('/pasien/import/{batch}', [PatientImportController::class, 'show'])->name('pasien.import.show');
@@ -129,8 +137,10 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/audit', [McuController::class, 'audits'])->name('audits.index');
     });
     Route::middleware('can:view-examination,peserta')->group(function (): void {
+        Route::get('/scan-mcu/{peserta}', [PemeriksaanController::class, 'scan'])->whereUuid('peserta')->name('pemeriksaan.qr');
         Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/pemeriksaan', [PemeriksaanController::class, 'edit'])->name('pemeriksaan.edit');
         Route::get('/{kunjungan}/peserta/{peserta}/pemeriksaan', [PemeriksaanController::class, 'edit'])->whereUuid(['kunjungan', 'peserta'])->name('pemeriksaan.scan');
+        Route::get('/{kunjungan}/peserta/{peserta}/pemeriksa', [PemeriksaanController::class, 'edit'])->whereUuid(['kunjungan', 'peserta'])->name('pemeriksaan.scan-legacy');
         Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/lampiran/{item}', [PemeriksaanController::class, 'attachment'])->name('pemeriksaan.attachment');
         Route::get('/kunjungan-mcu/{kunjungan}/peserta/{peserta}/laporan', [PemeriksaanController::class, 'report'])->name('pemeriksaan.report');
     });

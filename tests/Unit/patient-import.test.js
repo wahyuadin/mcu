@@ -29,6 +29,7 @@ async function harness(run, { reduced = false, reopen = false } = {}) {
     const mapping = new Element();
     const drop = new Element();
     const report = new Element();
+    const alert = new Element();
     const filter = new Element(); filter.value = 'all';
     const search = new Element(); search.value = '';
     const rows = new Element();
@@ -61,11 +62,13 @@ async function harness(run, { reduced = false, reopen = false } = {}) {
     form.action = '/pasien/import';
     dialog.querySelector = (selector) => ({ '[data-patient-import-form]': form, '[data-patient-import-status]': status, '[data-patient-import-preview]': preview, '[data-patient-import-confirm]': confirm, '[data-patient-import-map-save]': mapSave, '[data-patient-import-mapping]': mapping, '[data-patient-import-drop]': drop, '[data-patient-import-report]': report, '[data-patient-import-filter]': filter, '[data-patient-import-search]': search, '[data-patient-import-rows]': rows })[selector] ?? new Element();
     dialog.querySelectorAll = () => [close];
+    const querySelector = dialog.querySelector;
+    dialog.querySelector = (selector) => selector === '[data-patient-import-alert]' ? alert : querySelector(selector);
     globalThis.window = { matchMedia: () => ({ matches: reduced }), addEventListener: (event, callback) => { windowEvents[event] = callback; } };
     globalThis.getComputedStyle = () => ({ opacity: '1', getPropertyValue: () => 'cubic-bezier(0.23, 1, 0.32, 1)' });
     setupPatientImport(dialog, { querySelectorAll: () => [trigger] });
     try {
-        await run({ dialog, form, file, save, status, trigger, close, animations, windowEvents, preview, confirm, drop, report, downloads, rows });
+        await run({ dialog, form, file, save, status, trigger, close, animations, windowEvents, preview, confirm, drop, report, downloads, rows, mapping, alert });
     } finally {
         Object.entries(originals).forEach(([name, value]) => {
             if (value === undefined) delete globalThis[name];
@@ -147,6 +150,23 @@ test('submission blocks duplicate clicks and closure while browser back restores
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 const sample = (status = 'preview') => ({ id: 'batch', status, headers: ['nama_karyawan'], mapping: { nama_karyawan: 'nama_karyawan' }, version: 0, confirm_url: '/confirm', report_url: status === 'complete' ? '/report.xlsx' : null, stats: { ready: status === 'preview' ? 1 : 0, failed: 1, succeeded: status === 'complete' ? 1 : 0, existing: 0, total: 2 }, rows: [{ number: 2, data: { nama_karyawan: '<script>Nama</script>' }, status: status === 'preview' ? 'ready' : 'succeeded', errors: [], visit: 'Kunjungan', package: 'Paket', nomor_mcu: null }, { number: 3, data: { nama_karyawan: 'Gagal' }, status: 'failed', errors: ['Jenis kelamin wajib'], visit: null, package: null, nomor_mcu: null }] });
 
+test('mapping marks NIK as optional and employee number as required using the server contract', async () => {
+    await harness(async ({ form, mapping }) => {
+        const data = { ...sample(), headers: ['nama_karyawan', 'nik', 'nip'], mapping: { nama_karyawan: 'nama_karyawan', nik: null, nip: 'nip' }, required_fields: ['nama_karyawan', 'nip'] };
+        globalThis.fetch = async () => ({ ok: true, json: async () => data });
+        form.events.submit({ preventDefault() {} });
+        await tick();
+        const national = mapping.children.find((label) => label.textContent.startsWith('nik ·'));
+        const employee = mapping.children.find((label) => label.textContent.startsWith('nip ·'));
+        assert.equal(national.textContent, 'nik · Opsional');
+        assert.equal(national.children[0].required, false);
+        assert.equal(national.children[0].children[0].textContent, 'Tidak dipetakan (opsional)');
+        assert.equal(employee.textContent, 'nip · Wajib');
+        assert.equal(employee.children[0].required, true);
+        assert.equal(mapping.children.some((label) => label.textContent.startsWith('tanggal_mcu')), false);
+    });
+});
+
 for (const selection of ['picker', 'drop']) {
     test(`${selection} upload includes the selected file before disabling controls`, async () => {
         await harness(async ({ form, file, drop, preview }) => {
@@ -174,10 +194,16 @@ for (const selection of ['picker', 'drop']) {
     });
 }
 
-test('upload stages a safe text preview and only confirmation imports then downloads failed results', async () => {
+test('upload stages a safe text preview and only explicit confirmation imports valid data', async () => {
     await harness(async ({ form, preview, confirm, report, downloads, rows }) => {
         const calls = [];
-        globalThis.fetch = async (url, options) => { calls.push({ url, options }); return { ok: true, json: async () => sample(url === '/confirm' ? 'complete' : 'preview') }; };
+        globalThis.fetch = async (url, options) => {
+            calls.push({ url, options });
+            const data = sample(url === '/confirm' ? 'complete' : 'preview');
+            data.stats.failed = 0;
+            data.rows = data.rows.slice(0, 1);
+            return { ok: true, json: async () => data };
+        };
         form.events.submit({ preventDefault() {} });
         await tick();
         assert.equal(calls.length, 1);
@@ -194,8 +220,43 @@ test('upload stages a safe text preview and only confirmation imports then downl
         assert.equal(confirm.hidden, true);
         assert.equal(report.href, '/report.xlsx');
         assert.equal(report.hidden, false);
-        assert.equal(downloads.length, 1);
-        assert.equal(downloads[0].clicked, true);
+        assert.equal(downloads.length, 0);
+    });
+});
+
+test('one invalid row shows the alert and blocks confirmation including after pageshow and remapping', async () => {
+    await harness(async ({ form, confirm, alert, windowEvents, mapping }) => {
+        let calls = 0;
+        globalThis.fetch = async () => { calls++; return { ok: true, json: async () => sample() }; };
+        form.events.submit({ preventDefault() {} });
+        await tick();
+        assert.equal(alert.hidden, false);
+        assert.equal(confirm.disabled, true);
+        confirm.events.click();
+        await tick();
+        assert.equal(calls, 1);
+        windowEvents.pageshow();
+        assert.equal(confirm.disabled, true);
+        mapping.children[0].children[0].events.change();
+        confirm.events.click();
+        assert.equal(calls, 1);
+    });
+});
+
+test('capacity exclusions do not block valid rows or appear in the valid filter', async () => {
+    await harness(async ({ form, confirm, alert, rows }) => {
+        const data = sample();
+        data.stats = { ...data.stats, failed: 0, excluded: 1 };
+        data.rows[1] = { ...data.rows[1], status: 'excluded', errors: ['Sisa kapasitas penuh'] };
+        globalThis.fetch = async () => ({ ok: true, json: async () => data });
+        form.events.submit({ preventDefault() {} });
+        await tick();
+        assert.equal(alert.hidden, true);
+        assert.equal(confirm.disabled, false);
+        assert.equal(rows.children[1].children[3].textContent, 'Tidak diikutkan · kapasitas penuh');
+        assert.equal(filterImportRows(data.rows, 'excluded').length, 1);
+        assert.equal(filterImportRows(data.rows, 'valid').length, 1);
+        assert.equal(filterImportRows(data.rows, 'failed').length, 0);
     });
 });
 

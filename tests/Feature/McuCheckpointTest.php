@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Karyawan;
 use App\Models\Paket;
 use App\Models\User;
+use Endroid\QrCode\Encoding\Encoding;
 use Endroid\QrCode\ErrorCorrectionLevel;
 use Endroid\QrCode\QrCode;
 use Endroid\QrCode\Writer\SvgWriter;
@@ -39,9 +40,9 @@ class McuCheckpointTest extends TestCase
                 && $checkpoint['items'] === ['anamnesa' => 'Anamnesa', 'fisik' => 'Fisik', 'rontgen' => 'Rontgen thoraks']);
         $qrDataUri = $response->viewData('checkpoint')['qrDataUri'];
         $scanUrl = $response->viewData('checkpoint')['scanUrl'];
-        $this->assertSame('/'.$participant->rencana_kunjungan_id.'/peserta/'.$participant->id.'/pemeriksaan', parse_url($scanUrl, PHP_URL_PATH));
+        $this->assertSame('/scan-mcu/'.$participant->id, parse_url($scanUrl, PHP_URL_PATH));
         $this->assertNull(parse_url($scanUrl, PHP_URL_QUERY));
-        $expectedQr = new QrCode(data: $scanUrl, errorCorrectionLevel: ErrorCorrectionLevel::Medium, size: 320, margin: 24);
+        $expectedQr = new QrCode(data: $scanUrl, encoding: new Encoding('ISO-8859-1'), errorCorrectionLevel: ErrorCorrectionLevel::Medium, size: 320, margin: 24);
         $this->assertSame((new SvgWriter)->write($expectedQr)->getDataUri(), $qrDataUri);
         $this->assertStringStartsWith('data:image/svg+xml;base64,', $qrDataUri);
         $svg = base64_decode(substr($qrDataUri, strpos($qrDataUri, ',') + 1), true);
@@ -68,6 +69,42 @@ class McuCheckpointTest extends TestCase
         $other = Karyawan::factory()->create();
         $this->actingAs(User::factory()->create(['role' => 'petugas']))
             ->get(route('pemeriksaan.scan', [$other->rencanaKunjungan, $participant]))->assertNotFound();
+    }
+
+    public function test_short_qr_link_preserves_local_host_and_opens_the_correct_participant(): void
+    {
+        $participant = $this->participant(['hipertensi']);
+        $this->actingAs(User::factory()->create(['role' => 'petugas']));
+        $response = $this->get('http://127.0.0.1:8000/kunjungan-mcu/'.$participant->rencana_kunjungan_id.'/peserta/'.$participant->id.'/pemeriksaan?tab=identitas')->assertOk();
+        $url = $response->viewData('checkpoint')['scanUrl'];
+        $this->assertSame('127.0.0.1', parse_url($url, PHP_URL_HOST));
+        $this->assertSame(8000, parse_url($url, PHP_URL_PORT));
+        $this->assertSame('/scan-mcu/'.$participant->id, parse_url($url, PHP_URL_PATH));
+        $this->assertLessThan(80, strlen($url));
+        $response->assertSee('href="'.$url.'"', false);
+        $target = route('pemeriksaan.edit', [$participant->rencanaKunjungan, $participant]);
+        $this->get($url)->assertRedirect($target);
+        $this->get($target)->assertOk()->assertViewHas('peserta', fn (Karyawan $peserta): bool => $peserta->is($participant));
+    }
+
+    public function test_short_and_truncated_legacy_scan_links_keep_authorization_and_visit_checks(): void
+    {
+        $participant = $this->participant(['ekg']);
+        $short = route('pemeriksaan.qr', $participant);
+        $legacy = route('pemeriksaan.scan-legacy', [$participant->rencanaKunjungan, $participant]);
+        foreach ([$short, $legacy] as $url) {
+            $this->get($url)->assertRedirect(route('login'));
+        }
+        $this->actingAs(User::factory()->create(['role' => 'unknown']));
+        foreach ([$short, $legacy] as $url) {
+            $this->get($url)->assertForbidden();
+        }
+        $this->actingAs(User::factory()->create(['role' => 'petugas']));
+        $this->get($legacy)->assertOk()->assertViewHas('peserta', fn (Karyawan $peserta): bool => $peserta->is($participant));
+        $other = Karyawan::factory()->create();
+        $this->get(route('pemeriksaan.scan-legacy', [$other->rencanaKunjungan, $participant]))->assertNotFound();
+        $participant->delete();
+        $this->get($short)->assertNotFound();
     }
 
     public function test_print_card_has_patient_data_logo_and_a5_landscape_layout(): void

@@ -87,7 +87,7 @@ class CategoryExaminationTabsTest extends TestCase
         $participant->perusahaan->update(['logo_path' => 'perusahaan/report-logo.webp']);
 
         $response = $this->get(route('pemeriksaan.report', [$participant->rencanaKunjungan, $participant]))->assertOk()
-            ->assertSee(asset('Template/assets/logo-nayaka.jpeg'), false)
+            ->assertSee(asset('template/assets/logo-nayaka.jpeg'), false)
             ->assertSee(route('perusahaan.logo', $participant->perusahaan), false)
             ->assertSee($participant->nama_karyawan)->assertSee($participant->perusahaan->nama_perusahaan)
             ->assertSee('PEMERIKSAAN')->assertSee('Ringkasan MCU')->assertSee('DRAFT — BELUM DIFINALISASI')

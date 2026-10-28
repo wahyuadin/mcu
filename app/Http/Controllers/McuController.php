@@ -12,6 +12,7 @@ use App\Models\Perusahaan;
 use App\Models\RencanaKunjungan;
 use App\PatientSpreadsheet;
 use App\VisitParticipants;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -204,6 +205,33 @@ class McuController extends Controller
         $kunjungan = RencanaKunjungan::create($data);
 
         return redirect()->route('rencana-kunjungan.show', $kunjungan)->with('success', 'Kunjungan dibuat.');
+    }
+
+    public function updateKunjungan(Request $request, RencanaKunjungan $kunjungan): JsonResponse|RedirectResponse
+    {
+        $data = $request->validate([
+            'perusahaan_id' => ['required', Rule::exists('perusahaans', 'id')->whereNull('deleted_at')],
+            'nomor_kunjungan' => ['required', 'string', 'max:255', Rule::unique('rencana_kunjungans', 'nomor_kunjungan')->ignore($kunjungan)],
+            'periode_kunjungan' => ['required', 'string', 'max:255'],
+            'tgl_mulai' => ['nullable', 'date'],
+            'tgl_selesai' => ['nullable', 'date', 'after_or_equal:tgl_mulai'],
+            'jumlah_peserta_direncanakan' => ['required', 'integer', 'min:1', 'max:1000000'],
+        ]);
+        DB::transaction(function () use ($data, $kunjungan): void {
+            $visit = RencanaKunjungan::whereKey($kunjungan->id)->lockForUpdate()->firstOrFail();
+            abort_if($visit->is_closing, 403);
+            if ($visit->perusahaan_id !== $data['perusahaan_id'] && $visit->karyawans()->withTrashed()->exists()) {
+                throw ValidationException::withMessages(['perusahaan_id' => 'Perusahaan tidak dapat diganti karena kunjungan sudah memiliki peserta.']);
+            }
+            if ($data['jumlah_peserta_direncanakan'] < $visit->karyawans()->count()) {
+                throw ValidationException::withMessages(['jumlah_peserta_direncanakan' => 'Target tidak boleh lebih kecil dari peserta terdaftar.']);
+            }
+            $visit->update($data);
+        });
+
+        return $request->expectsJson()
+            ? response()->json(['message' => 'Rencana kunjungan diperbarui.'])
+            : back()->with('success', 'Rencana kunjungan diperbarui.');
     }
 
     public function show(Request $request, RencanaKunjungan $kunjungan, VisitParticipants $participants): View|StreamedResponse

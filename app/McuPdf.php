@@ -74,9 +74,9 @@ class McuPdf
                 'photo' => $photo,
                 'photoSize' => $photo ? $this->imageSize($photo, 95, 120) : null,
                 'doctors' => Dokter::withTrashed()->pluck('nama_dokter', 'id')->all(),
-                'brand' => $this->brandAssets['letterhead'] ??= 'data:image/jpeg;base64,'.base64_encode(file_get_contents(public_path('Template/assets/report-pdf-letterhead.jpg'))),
-                'footer' => $this->brandAssets['footer'] ??= 'data:image/jpeg;base64,'.base64_encode(file_get_contents(public_path('Template/assets/report-pdf-footer.jpg'))),
-                'cover' => $this->brandAssets['cover'] ??= 'data:image/jpeg;base64,'.base64_encode(file_get_contents(public_path('Template/assets/report-pdf-cover.jpg'))),
+                'brand' => $this->brandAssets['letterhead'] ??= 'data:image/jpeg;base64,'.base64_encode(file_get_contents(public_path('template/assets/report-pdf-letterhead.jpg'))),
+                'footer' => $this->brandAssets['footer'] ??= 'data:image/jpeg;base64,'.base64_encode(file_get_contents(public_path('template/assets/report-pdf-footer.jpg'))),
+                'cover' => $this->brandAssets['cover'] ??= 'data:image/jpeg;base64,'.base64_encode(file_get_contents(public_path('template/assets/report-pdf-cover.jpg'))),
             ])->render());
             $pdf->render();
             $pdf->getCanvas()->page_text(520, 822, '{PAGE_NUM} / {PAGE_COUNT}', $pdf->getFontMetrics()->getFont('DejaVu Sans'), 7, [0.4, 0.45, 0.5]);

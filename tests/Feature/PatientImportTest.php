@@ -25,31 +25,36 @@ class PatientImportTest extends TestCase
 {
     use RefreshDatabase;
 
+    private const LEGACY_HEADERS = ['nama_karyawan', 'nik', 'nip', 'jenis_kelamin', 'tanggal_lahir', 'bagian', 'jabatan', 'telepon', 'tanggal_mcu', 'kunjungan_id', 'paket_id', 'tempat_lahir'];
+
     public function test_template_has_example_patient_and_current_master_lookup_sheets(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
-        $visit = RencanaKunjungan::factory()->create();
+        $visit = RencanaKunjungan::factory()->create(['jumlah_peserta_direncanakan' => 100]);
         $package = Paket::factory()->master()->create();
         $closed = RencanaKunjungan::factory()->create(['is_closing' => true]);
-        $this->get(route('pasien.index'))->assertOk()->assertSee('data-patient-import-drop', false)->assertSee('Upload Data')->assertSee('Unduh template .xlsx');
+        $this->get(route('pasien.index'))->assertOk()->assertSee('data-patient-import-drop', false)->assertSee('Upload Data')->assertSee('Unduh template .xlsx')
+            ->assertSee('2.000 pasien')->assertSee('data-patient-import-alert', false)->assertSee('role="alert"', false)->assertSee('Silakan crosscheck terlebih dahulu');
         $response = $this->get(route('pasien.import.template'))->assertOk()->assertDownload('template-import-pasien.xlsx');
         $book = $this->readBook($response->streamedContent());
         $this->assertSame(['Pasien', 'Master Kunjungan MCU', 'Master Paket', 'Jenis Kelamin'], $book->getSheetNames());
-        $this->assertSame(PatientSpreadsheet::HEADERS, $book->getSheet(0)->rangeToArray('A1:L1')[0]);
+        $this->assertSame(['kunjungan_id', 'paket_id', 'nama_karyawan', 'nik', 'nip', 'jenis_kelamin', 'tempat_lahir', 'tanggal_lahir', 'bagian', 'jabatan', 'telepon'], $book->getSheet(0)->rangeToArray('A1:K1')[0]);
         $sample = $book->getSheet(0);
-        $this->assertSame('Wahyu Adi Nugroho', $sample->getCell('A2')->getValue());
-        $this->assertMatchesRegularExpression('/^[1-9][0-9]{15}$/', $sample->getCell('B2')->getValue());
-        $this->assertSame(DataType::TYPE_STRING, $sample->getCell('B2')->getDataType());
-        $this->assertSame('NYK-19423', $sample->getCell('C2')->getValue());
-        $this->assertSame('1', $sample->getCell('D2')->getValue());
-        $this->assertSame('2005-08-24', $sample->getCell('E2')->getValue());
-        $this->assertSame('Operasional', $sample->getCell('F2')->getValue());
-        $this->assertMatchesRegularExpression('/^08[0-9]{10}$/', $sample->getCell('H2')->getValue());
-        $this->assertSame(DataType::TYPE_STRING, $sample->getCell('H2')->getDataType());
-        $this->assertSame($visit->id, $sample->getCell('J2')->getValue());
-        $this->assertSame($package->id, $sample->getCell('K2')->getValue());
-        $this->assertSame('Bandung', $sample->getCell('L2')->getValue());
-        $this->assertSame('@', $book->getSheet(0)->getStyle('B2')->getNumberFormat()->getFormatCode());
+        $this->assertSame('Wahyu Adi Nugroho', $sample->getCell('C2')->getValue());
+        $this->assertSame('8841583952153971', $sample->getCell('D2')->getValue());
+        $this->assertSame(DataType::TYPE_STRING, $sample->getCell('D2')->getDataType());
+        $this->assertSame('NYK-19423', $sample->getCell('E2')->getValue());
+        $this->assertSame('1', $sample->getCell('F2')->getValue());
+        $this->assertSame('2005-08-24', $sample->getCell('H2')->getValue());
+        $this->assertSame('Operasional', $sample->getCell('I2')->getValue());
+        $this->assertSame('Staff IT', $sample->getCell('J2')->getValue());
+        $this->assertSame('086001143473', $sample->getCell('K2')->getValue());
+        $this->assertSame(DataType::TYPE_STRING, $sample->getCell('K2')->getDataType());
+        $this->assertSame($visit->id, $sample->getCell('A2')->getValue());
+        $this->assertSame($package->id, $sample->getCell('B2')->getValue());
+        $this->assertSame('Bandung', $sample->getCell('G2')->getValue());
+        $this->assertSame('@', $book->getSheet(0)->getStyle('D2')->getNumberFormat()->getFormatCode());
+        $this->assertNull($sample->getCell('L1')->getValue());
         $this->assertSame($visit->id, $book->getSheet(1)->getCell('A2')->getValue());
         $this->assertStringNotContainsString($closed->id, json_encode($book->getSheet(1)->toArray()));
         $this->assertSame($package->id, $book->getSheet(2)->getCell('A2')->getValue());
@@ -72,16 +77,16 @@ class PatientImportTest extends TestCase
 
         $this->assertCount(4, $book->getSheetNames());
         $this->assertNull($book->getSheet(2)->getCell('A2')->getValue());
-        $this->assertNull($book->getSheet(0)->getCell('J2')->getValue());
-        $this->assertNull($book->getSheet(0)->getCell('K2')->getValue());
+        $this->assertNull($book->getSheet(0)->getCell('A2')->getValue());
+        $this->assertNull($book->getSheet(0)->getCell('B2')->getValue());
         $this->assertSame([['1', 'Laki-laki'], ['2', 'Perempuan']], $book->getSheet(3)->rangeToArray('A2:B3'));
         $book->disconnectWorksheets();
     }
 
-    public function test_numeric_and_text_gender_codes_are_normalized_and_unknown_codes_are_skipped(): void
+    public function test_numeric_and_text_gender_codes_are_normalized_and_unknown_codes_block_the_batch(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
-        $visit = RencanaKunjungan::factory()->create(['kuota_peserta' => 0]);
+        $visit = RencanaKunjungan::factory()->create(['kuota_peserta' => 0, 'jumlah_peserta_direncanakan' => 100]);
         $package = Paket::factory()->master()->create();
         $rows = [];
         foreach ([1, 2, '1', '2', 'L', 'P', 0, 3, ''] as $index => $gender) {
@@ -95,7 +100,10 @@ class PatientImportTest extends TestCase
         $this->assertSame(6, $batch['stats']['ready']);
         $this->assertSame(3, $batch['stats']['failed']);
         $this->assertSame(['L', 'P', 'L', 'P', 'L', 'P'], array_column(array_column(array_slice($batch['rows'], 0, 6), 'data'), 'jenis_kelamin'));
-        $this->postJson($batch['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 6)->assertJsonPath('stats.failed', 3);
+        $this->postJson($batch['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 0)->assertJsonPath('stats.failed', 3)->assertJsonPath('can_confirm', false);
+        $this->assertDatabaseCount('karyawans', 0);
+        $valid = $this->stage(array_slice($rows, 0, 6));
+        $this->postJson($valid['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 6);
         foreach (['L', 'P', 'L', 'P', 'L', 'P'] as $index => $gender) {
             $this->assertDatabaseHas('karyawans', ['nama_karyawan' => 'Pasien '.$index, 'jenis_kelamin' => $gender]);
             $this->assertDatabaseHas('pasiens', ['nama' => 'Pasien '.$index, 'jenis_kelamin' => $gender]);
@@ -112,7 +120,7 @@ class PatientImportTest extends TestCase
     public function test_filled_example_template_round_trips_birthplace_and_rejects_oversized_birthplaces(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
-        $visit = RencanaKunjungan::factory()->create(['kuota_peserta' => 0]);
+        $visit = RencanaKunjungan::factory()->create(['kuota_peserta' => 0, 'jumlah_peserta_direncanakan' => 100]);
         $package = Paket::factory()->master()->create();
         $file = $this->saveBook(app(PatientSpreadsheet::class)->template());
 
@@ -134,8 +142,8 @@ class PatientImportTest extends TestCase
     public function test_upload_only_previews_and_confirmation_preserves_text_dates_and_per_row_placement(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
-        $visit = RencanaKunjungan::factory()->create(['kuota_peserta' => 0]);
-        $second = RencanaKunjungan::factory()->create(['kuota_peserta' => 0]);
+        $visit = RencanaKunjungan::factory()->create(['kuota_peserta' => 0, 'jumlah_peserta_direncanakan' => 100]);
+        $second = RencanaKunjungan::factory()->create(['kuota_peserta' => 0, 'jumlah_peserta_direncanakan' => 100]);
         $package = Paket::factory()->master()->create();
         $another = Paket::factory()->master()->create();
         $batch = $this->stage([
@@ -153,43 +161,50 @@ class PatientImportTest extends TestCase
         $ayu = Karyawan::where('nama_karyawan', 'Ayu')->firstOrFail();
         $this->assertSame('0012345678901234', $ayu->nik);
         $this->assertSame('081234567890', $ayu->telepon);
-        $this->assertSame(now()->toDateString(), $ayu->tanggal_mcu->toDateString());
+        $this->assertNull($ayu->tanggal_mcu);
         $this->assertSame($visit->perusahaan_id, $ayu->perusahaan_id);
         $this->assertSame($package->id, $ayu->paket_id);
         $this->assertStringStartsWith('NYK-', $ayu->nomor_mcu);
         $this->assertNull($ayu->foto);
         $budi = Karyawan::where('nama_karyawan', 'Budi')->firstOrFail();
         $this->assertSame('1991-02-03', $budi->tanggal_lahir->toDateString());
+        $this->assertNull($budi->tanggal_mcu);
         $this->assertSame($second->id, $budi->rencana_kunjungan_id);
         $this->assertTrue($visit->pakets()->whereKey($package->id)->exists());
         $this->assertTrue($second->pakets()->whereKey($another->id)->exists());
     }
 
-    public function test_partial_import_report_preserves_failed_source_and_retry_does_not_duplicate_success(): void
+    public function test_invalid_batch_saves_nothing_and_report_preserves_the_entire_batch_for_retry(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
-        $visit = RencanaKunjungan::factory()->create(['kuota_peserta' => 0]);
+        $visit = RencanaKunjungan::factory()->create(['kuota_peserta' => 0, 'jumlah_peserta_direncanakan' => 100]);
         $package = Paket::factory()->master()->create();
         $rows = [$this->row('Valid', $visit, $package), $this->row('Invalid', $visit, $package, 'X')];
         $batch = $this->stage($rows);
         $this->assertSame(1, $batch['stats']['ready']);
         $this->assertSame(1, $batch['stats']['failed']);
-        $result = $this->postJson($batch['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 1)->assertJsonPath('stats.failed', 1)->json();
-        $this->assertDatabaseCount('pasiens', 1);
+        $result = $this->postJson($batch['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('status', 'preview')->assertJsonPath('stats.succeeded', 0)->assertJsonPath('stats.failed', 1)->json();
+        $this->assertDatabaseCount('pasiens', 0);
+        $this->assertDatabaseCount('karyawans', 0);
+        $this->assertDatabaseCount('patient_import_receipts', 0);
+        $this->assertFalse($visit->pakets()->whereKey($package->id)->exists());
         $report = $this->get($result['report_url'])->assertOk();
         $book = $this->readBook($report->streamedContent());
-        $this->assertSame(['Pasien', 'Berhasil', 'Gagal'], $book->getSheetNames());
-        $this->assertSame('Invalid', $book->getSheetByName('Pasien')->getCell('A2')->getValue());
+        $this->assertSame(['Pasien', 'Berhasil', 'Gagal', 'Tidak diikutkan'], $book->getSheetNames());
+        $this->assertSame('Valid', $book->getSheetByName('Pasien')->getCell('C2')->getValue());
+        $this->assertSame('Invalid', $book->getSheetByName('Pasien')->getCell('C3')->getValue());
         $this->assertSame('3', $book->getSheetByName('Gagal')->getCell('A2')->getValue());
         $this->assertSame('Invalid', $book->getSheetByName('Gagal')->getCell('B2')->getValue());
         $this->assertStringContainsString('harus 1 (Laki-laki) atau 2 (Perempuan)', $book->getSheetByName('Gagal')->getCell('N2')->getValue());
-        $this->assertStringStartsWith('NYK-', $book->getSheetByName('Berhasil')->getCell('N2')->getValue());
+        $this->assertNull($book->getSheetByName('Berhasil')->getCell('M2')->getValue());
         $book->disconnectWorksheets();
-        $this->postJson($batch['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 1);
+        $this->postJson($batch['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 0);
         $rows[1][3] = 'P';
         $retry = $this->stage($rows);
-        $this->assertSame(1, $retry['stats']['existing']);
-        $this->postJson($retry['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 1)->assertJsonPath('stats.existing', 1);
+        $this->assertSame(0, $retry['stats']['existing']);
+        $this->postJson($retry['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 2)->assertJsonPath('stats.existing', 0);
+        $this->postJson($retry['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 2);
+        $this->assertSame(2, $this->stage($rows)['stats']['existing']);
         $this->assertDatabaseCount('karyawans', 2);
         $this->assertDatabaseCount('pasiens', 2);
     }
@@ -197,11 +212,11 @@ class PatientImportTest extends TestCase
     public function test_confirmation_revalidates_closed_visit_deleted_package_and_quota(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
-        $visit = RencanaKunjungan::factory()->create(['kuota_peserta' => 0]);
+        $visit = RencanaKunjungan::factory()->create(['kuota_peserta' => 0, 'jumlah_peserta_direncanakan' => 100]);
         $package = Paket::factory()->master()->create();
         $batch = $this->stage([$this->row('Satu', $visit, $package), $this->row('Dua', $visit, $package)]);
         $visit->update(['kuota_peserta' => 1]);
-        $this->postJson($batch['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 1)->assertJsonPath('stats.failed', 1);
+        $this->postJson($batch['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 1)->assertJsonPath('stats.excluded', 1)->assertJsonPath('stats.failed', 0);
         $batch = $this->stage([$this->row('Tiga', $visit, $package)]);
         $visit->update(['is_closing' => true]);
         $package->delete();
@@ -214,7 +229,7 @@ class PatientImportTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin']));
         $existing = Karyawan::factory()->create(['nik' => '3171010101900001', 'nip' => 'EMP-01']);
         $visit = $existing->rencanaKunjungan;
-        $visit->update(['kuota_peserta' => 0]);
+        $visit->update(['kuota_peserta' => 0, 'jumlah_peserta_direncanakan' => 100]);
         $package = $existing->paket;
         $rows = [$this->row('Invalid', $visit, $package, 'X'), $this->row('Valid', $visit, $package), $this->row('Duplicate', $visit, $package), $this->row('Existing NIK', $visit, $package), $this->row('Existing NIP', $visit, $package)];
         foreach ([0, 1, 2] as $index) {
@@ -225,15 +240,15 @@ class PatientImportTest extends TestCase
         $batch = $this->stage($rows);
         $this->assertSame(1, $batch['stats']['ready']);
         $this->assertSame(4, $batch['stats']['failed']);
-        $this->postJson($batch['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 1);
-        $this->assertDatabaseCount('pasiens', 2);
+        $this->postJson($batch['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 0);
+        $this->assertDatabaseCount('pasiens', 1);
         $this->assertSame($existing->nama_karyawan, $existing->pasien->fresh()->nama);
     }
 
     public function test_custom_columns_can_be_mapped_and_stale_or_duplicate_mapping_is_rejected(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
-        $visit = RencanaKunjungan::factory()->create();
+        $visit = RencanaKunjungan::factory()->create(['jumlah_peserta_direncanakan' => 100]);
         $package = Paket::factory()->master()->create();
         $batch = $this->stage([['Nama', 'L', $visit->id, $package->id, 'EMP-001', '1990-01-01', 'Operasional']], ['Nama', 'Gender', 'Visit', 'Package', 'Karyawan', 'Lahir', 'Departemen']);
         $mapping = array_fill_keys(PatientSpreadsheet::HEADERS, null);
@@ -248,7 +263,7 @@ class PatientImportTest extends TestCase
     public function test_invalid_formula_numeric_nik_and_future_birth_date_are_row_errors(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
-        $visit = RencanaKunjungan::factory()->create();
+        $visit = RencanaKunjungan::factory()->create(['jumlah_peserta_direncanakan' => 100]);
         $package = Paket::factory()->master()->create();
         $row = $this->row('=1+1', $visit, $package);
         $row[1] = 3171010101900001;
@@ -264,13 +279,13 @@ class PatientImportTest extends TestCase
     public function test_cached_lookup_ids_are_used_without_evaluating_formulas(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
-        $visit = RencanaKunjungan::factory()->create();
+        $visit = RencanaKunjungan::factory()->create(['jumlah_peserta_direncanakan' => 100]);
         $package = Paket::factory()->master()->create();
         $book = app(PatientSpreadsheet::class)->template();
         $sheet = $book->getSheetByName('Pasien');
-        $sheet->setCellValue('A2', 'Lookup')->setCellValue('D2', 'L');
-        $sheet->setCellValue('J2', '=\'Master Kunjungan MCU\'!A2');
-        $sheet->setCellValue('K2', '=\'Master Paket\'!A2');
+        $sheet->setCellValue('C2', 'Lookup')->setCellValue('F2', 'L');
+        $sheet->setCellValue('A2', '=\'Master Kunjungan MCU\'!A2');
+        $sheet->setCellValue('B2', '=\'Master Paket\'!A2');
         $file = $this->saveBook($book);
         $batch = $this->postJson(route('pasien.import.store'), ['import_file' => $file])->assertOk()->json();
         $this->assertSame(1, $batch['stats']['ready'], json_encode($batch['rows']));
@@ -281,7 +296,7 @@ class PatientImportTest extends TestCase
     public function test_unreadable_empty_macro_oversized_and_duplicate_header_files_save_nothing_and_offer_report(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
-        foreach ([$this->upload([]), $this->upload(array_fill(0, 501, ['Nama'])), $this->upload([['Nama']], ['nama', 'nama']), UploadedFile::fake()->create('bad.csv', 1, 'text/csv'), UploadedFile::fake()->create('large.xlsx', 5121)] as $file) {
+        foreach ([$this->upload([]), $this->upload(array_fill(0, 2001, ['Nama'])), $this->upload([['Nama']], ['nama', 'nama']), UploadedFile::fake()->create('bad.csv', 1, 'text/csv'), UploadedFile::fake()->create('large.xlsx', 5121)] as $file) {
             $response = $this->postJson(route('pasien.import.store'), ['import_file' => $file])->assertUnprocessable()->assertJsonPath('stats.failed', 1);
             $this->get($response->json('report_url'))->assertOk();
         }
@@ -313,10 +328,10 @@ class PatientImportTest extends TestCase
         $this->assertDatabaseMissing('patient_import_batches', ['id' => $batch->id]);
     }
 
-    public function test_failed_row_storage_rolls_back_identity_and_package_binding_without_losing_other_rows(): void
+    public function test_failed_row_storage_rolls_back_the_entire_batch_and_package_bindings(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
-        $visit = RencanaKunjungan::factory()->create(['kuota_peserta' => 0]);
+        $visit = RencanaKunjungan::factory()->create(['kuota_peserta' => 0, 'jumlah_peserta_direncanakan' => 100]);
         $package = Paket::factory()->master()->create();
         $failedPackage = Paket::factory()->master()->create();
         $batch = $this->stage([$this->row('Sukses', $visit, $package), $this->row('Gagal simpan', $visit, $failedPackage)]);
@@ -326,21 +341,23 @@ class PatientImportTest extends TestCase
             }
         });
         try {
-            $this->postJson($batch['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 1)->assertJsonPath('stats.failed', 1);
+            $this->postJson($batch['confirm_url'], ['version' => 0])->assertUnprocessable()->assertJsonValidationErrors('import');
         } finally {
             Event::forget('eloquent.created: '.Karyawan::class);
         }
-        $this->assertDatabaseCount('karyawans', 1);
-        $this->assertDatabaseCount('pasiens', 1);
-        $this->assertDatabaseCount('patient_import_receipts', 1);
+        $this->assertDatabaseCount('karyawans', 0);
+        $this->assertDatabaseCount('pasiens', 0);
+        $this->assertDatabaseCount('patient_import_receipts', 0);
         $this->assertFalse($visit->pakets()->whereKey($failedPackage->id)->exists());
-        $this->assertTrue($visit->pakets()->whereKey($package->id)->exists());
+        $this->assertFalse($visit->pakets()->whereKey($package->id)->exists());
+        $this->assertSame('preview', PatientImportBatch::findOrFail($batch['id'])->status);
+        $this->postJson($batch['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 2);
     }
 
     public function test_sensitive_preview_is_encrypted_and_report_writes_formula_like_text_as_literal_values(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
-        $visit = RencanaKunjungan::factory()->create();
+        $visit = RencanaKunjungan::factory()->create(['jumlah_peserta_direncanakan' => 100]);
         $package = Paket::factory()->master()->create();
         $row = $this->row('Nama Rahasia', $visit, $package, 'X');
         $row[6] = '=HYPERLINK("https://example.com","click")';
@@ -357,11 +374,11 @@ class PatientImportTest extends TestCase
     public function test_uncached_lookup_is_a_readable_row_error_and_never_executes_on_the_server(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']));
-        $visit = RencanaKunjungan::factory()->create();
+        $visit = RencanaKunjungan::factory()->create(['jumlah_peserta_direncanakan' => 100]);
         $package = Paket::factory()->master()->create();
         $book = app(PatientSpreadsheet::class)->template();
         $sheet = $book->getSheet(0);
-        $sheet->setCellValue('A2', 'Uncached')->setCellValue('D2', 'L')->setCellValue('J2', '=\'Master Kunjungan MCU\'!A2')->setCellValue('K2', $package->id);
+        $sheet->setCellValue('C2', 'Uncached')->setCellValue('F2', 'L')->setCellValue('A2', '=\'Master Kunjungan MCU\'!A2')->setCellValue('B2', $package->id);
         $batch = $this->postJson(route('pasien.import.store'), ['import_file' => $this->saveBook($book, false)])->assertOk()->assertJsonPath('stats.failed', 1)->json();
         $this->assertStringContainsString('tempel hasil sebagai nilai', implode(' ', $batch['rows'][0]['errors']));
         $this->assertNull($batch['rows'][0]['data']['kunjungan_id']);
@@ -388,11 +405,125 @@ class PatientImportTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin']));
         $package = Paket::factory()->create();
         $row = $this->row('Tanpa KTP', $package->rencanaKunjungan, $package);
+        $package->rencanaKunjungan->update(['jumlah_peserta_direncanakan' => 100]);
         $row[1] = '';
         $batch = $this->stage([$row]);
         $this->assertSame(1, $batch['stats']['ready']);
         $this->postJson($batch['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 1);
         $this->assertDatabaseHas('karyawans', ['nik' => null, 'nip' => $row[2]]);
+    }
+
+    public function test_two_thousand_rows_are_accepted_for_crosscheck_but_two_thousand_and_one_are_rejected(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+        $visit = RencanaKunjungan::factory()->create(['jumlah_peserta_direncanakan' => 2300, 'kuota_peserta' => 0]);
+        $package = Paket::factory()->master()->create();
+        $rows = array_map(fn (int $index): array => $this->row('Batas '.$index, $visit, $package), range(1, 2000));
+
+        $batch = $this->stage($rows);
+
+        $this->assertSame(2000, $batch['stats']['ready']);
+        $this->assertTrue($batch['can_confirm']);
+        $rows[] = $this->row('Baris 2001', $visit, $package);
+        $this->postJson(route('pasien.import.store'), ['import_file' => $this->upload($rows)])
+            ->assertUnprocessable()->assertJsonPath('can_confirm', false)->assertJsonPath('stats.succeeded', 0);
+        $this->assertDatabaseCount('karyawans', 0);
+        $this->assertDatabaseCount('pasiens', 0);
+    }
+
+    public function test_manual_participants_and_previous_imports_reduce_the_planned_capacity_in_source_order(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+        $visit = RencanaKunjungan::factory()->create(['jumlah_peserta_direncanakan' => 2300, 'kuota_peserta' => 0]);
+        $package = Paket::factory()->master()->create();
+        Karyawan::factory()->count(300)->create(['rencana_kunjungan_id' => $visit->id, 'perusahaan_id' => $visit->perusahaan_id, 'paket_id' => $package->id, 'nik' => null]);
+        $firstRows = array_map(fn (int $index): array => $this->row('Batch pertama '.$index, $visit, $package), range(1, 1000));
+        $first = $this->stage($firstRows);
+        $this->assertDatabaseCount('karyawans', 300);
+        $this->postJson($first['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 1000);
+        $secondRows = array_map(fn (int $index): array => $this->row('Batch kedua '.$index, $visit, $package), range(1, 1001));
+
+        $second = $this->stage($secondRows);
+
+        $this->assertSame(1000, $second['stats']['ready']);
+        $this->assertSame(1, $second['stats']['excluded']);
+        $this->assertSame(0, $second['stats']['failed']);
+        $this->assertTrue($second['can_confirm']);
+        $this->assertSame('excluded', $second['rows'][1000]['status']);
+        $this->assertDatabaseCount('karyawans', 1300);
+        $result = $this->postJson($second['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 1000)->assertJsonPath('stats.excluded', 1)->json();
+        $this->assertDatabaseCount('karyawans', 2300);
+        $this->assertDatabaseMissing('karyawans', ['nama_karyawan' => 'Batch kedua 1001']);
+        $book = $this->readBook($this->get($result['report_url'])->assertOk()->streamedContent());
+        $this->assertSame('Batch kedua 1001', $book->getSheetByName('Tidak diikutkan')->getCell('D2')->getValue());
+        $this->assertSame(1001, $book->getSheetByName('Berhasil')->getHighestDataRow());
+        $book->disconnectWorksheets();
+        $this->assertSame(1000, $this->stage($firstRows)['stats']['existing']);
+    }
+
+    public function test_capacity_is_rechecked_after_manual_registration_and_is_separate_for_each_visit(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+        $first = RencanaKunjungan::factory()->create(['jumlah_peserta_direncanakan' => 2, 'kuota_peserta' => 0]);
+        $second = RencanaKunjungan::factory()->create(['jumlah_peserta_direncanakan' => 1, 'kuota_peserta' => 0]);
+        $package = Paket::factory()->master()->create();
+        $batch = $this->stage([$this->row('Pertama A', $first, $package), $this->row('Kedua A', $second, $package), $this->row('Pertama B', $first, $package), $this->row('Kedua B', $second, $package)]);
+        $this->assertSame(3, $batch['stats']['ready']);
+        Karyawan::factory()->create(['rencana_kunjungan_id' => $first->id, 'perusahaan_id' => $first->perusahaan_id, 'paket_id' => $package->id]);
+
+        $this->postJson($batch['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 2)->assertJsonPath('stats.excluded', 2)->assertJsonPath('stats.failed', 0);
+
+        $this->assertSame(2, $first->karyawans()->count());
+        $this->assertSame(1, $second->karyawans()->count());
+        $this->assertDatabaseMissing('karyawans', ['nama_karyawan' => 'Pertama B']);
+        $this->assertDatabaseMissing('karyawans', ['nama_karyawan' => 'Kedua B']);
+    }
+
+    public function test_invalid_data_beyond_capacity_still_blocks_every_visit_in_the_batch(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+        $visit = RencanaKunjungan::factory()->create(['jumlah_peserta_direncanakan' => 1]);
+        $other = RencanaKunjungan::factory()->create(['jumlah_peserta_direncanakan' => 100]);
+        $package = Paket::factory()->master()->create();
+        $duplicate = $this->row('Kapasitas B', $visit, $package);
+        $batch = $this->stage([$this->row('Kapasitas A', $visit, $package), $duplicate, $duplicate, $this->row('Tidak valid', $visit, $package, 'X'), $this->row('Kunjungan lain', $other, $package)]);
+
+        $this->postJson($batch['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('can_confirm', false)->assertJsonPath('stats.failed', 2)->assertJsonPath('stats.excluded', 1)->assertJsonPath('stats.succeeded', 0);
+
+        $this->assertDatabaseCount('karyawans', 0);
+        $this->assertDatabaseCount('pasiens', 0);
+        $this->assertDatabaseCount('patient_import_receipts', 0);
+    }
+
+    public function test_new_duplicate_after_preview_blocks_the_whole_batch_at_confirmation(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+        $visit = RencanaKunjungan::factory()->create(['jumlah_peserta_direncanakan' => 100]);
+        $package = Paket::factory()->master()->create();
+        $rows = [$this->row('Aman', $visit, $package), $this->row('Terdaftar setelah preview', $visit, $package)];
+        $batch = $this->stage($rows);
+        Karyawan::factory()->create(['rencana_kunjungan_id' => $visit->id, 'perusahaan_id' => $visit->perusahaan_id, 'paket_id' => $package->id, 'nip' => $rows[1][2]]);
+
+        $this->postJson($batch['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('can_confirm', false)->assertJsonPath('stats.failed', 1)->assertJsonPath('stats.succeeded', 0);
+
+        $this->assertDatabaseCount('karyawans', 1);
+        $this->assertDatabaseCount('pasiens', 1);
+        $this->assertDatabaseCount('patient_import_receipts', 0);
+        $this->assertDatabaseMissing('karyawans', ['nama_karyawan' => 'Aman']);
+    }
+
+    public function test_unset_planned_total_does_not_allow_import_even_with_a_positive_quota(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+        $visit = RencanaKunjungan::factory()->create(['jumlah_peserta_direncanakan' => null]);
+        $package = Paket::factory()->master()->create();
+
+        $batch = $this->stage([$this->row('Belum ada target', $visit, $package)]);
+
+        $this->assertFalse($batch['can_confirm']);
+        $this->assertSame(1, $batch['stats']['excluded']);
+        $this->postJson($batch['confirm_url'], ['version' => 0])->assertOk()->assertJsonPath('stats.succeeded', 0);
+        $this->assertDatabaseCount('karyawans', 0);
     }
 
     /** @return list<string> */
@@ -417,7 +548,7 @@ class PatientImportTest extends TestCase
     {
         $book = new Spreadsheet;
         $sheet = $book->getActiveSheet()->setTitle('Pasien');
-        $sheet->fromArray($headers ?? PatientSpreadsheet::HEADERS, null, 'A1');
+        $sheet->fromArray($headers ?? self::LEGACY_HEADERS, null, 'A1');
         foreach ($rows as $index => $row) {
             foreach ($row as $column => $value) {
                 if (is_string($value) && ! str_starts_with($value, '=')) {

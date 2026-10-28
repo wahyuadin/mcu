@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { moveOrderItem, setupItemOrderModal } from '../../resources/js/item-order.js';
+import { moveOrderItem, moveFilteredOrderItem, setupItemOrderModal } from '../../resources/js/item-order.js';
 
 class Element {
     constructor() { this.dataset = {}; this.children = []; this.events = {}; this.disabled = false; }
@@ -88,6 +88,14 @@ test('moving a card preserves all items and does not mutate the original order',
     assert.deepEqual(items, ['a', 'b', 'c']);
     assert.deepEqual(moveOrderItem(items, -1, 1), items);
     assert.deepEqual(moveOrderItem(items, 0, 5), items);
+});
+
+test('reordering a subcategory retains the exact slots of every item outside that filter', () => {
+    const items = [{ id: 'a', subcategory_id: 'first' }, { id: 'b', subcategory_id: 'other' }, { id: 'c', subcategory_id: 'first' }, { id: 'd', subcategory_id: null }];
+    assert.deepEqual(moveFilteredOrderItem(items, 'first', 0, 1).map((item) => item.id), ['c', 'b', 'a', 'd']);
+    assert.deepEqual(items.map((item) => item.id), ['a', 'b', 'c', 'd']);
+    assert.deepEqual(moveFilteredOrderItem(items, '', 0, 1).map((item) => item.id), ['b', 'a', 'c', 'd']);
+    assert.deepEqual(moveFilteredOrderItem(items, '__none', 0, 1), items);
 });
 
 test('category ordering loads all cards without a category field and saves their complete order', async () => {

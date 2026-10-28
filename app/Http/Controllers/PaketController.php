@@ -7,6 +7,7 @@ use App\Models\McuItem;
 use App\Models\Paket;
 use App\Models\RencanaKunjungan;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -40,6 +41,7 @@ class PaketController extends Controller
             'paket' => new Paket,
             'catalog' => Paket::getDefaultItemCatalog(),
             'categories' => $this->categories(),
+            'templatePackages' => Paket::orderBy('nama_paket')->get(['id', 'nama_paket']),
         ]);
     }
 
@@ -64,6 +66,26 @@ class PaketController extends Controller
         });
 
         return redirect()->route('paket.show', $paket)->with('success', 'Paket dibuat.');
+    }
+
+    public function template(Paket $paket): JsonResponse
+    {
+        $available = $this->categories()->pluck('items')->flatten(1);
+        $snapshotItems = collect($paket->dynamic_schema ?? [])->pluck('items')->flatten(1);
+        $legacyKeys = array_keys(array_filter($paket->active_items ?? []));
+        $selected = $available->filter(fn (McuItem $item): bool => $snapshotItems->contains('id', $item->id) || ($item->legacy_key && in_array($item->legacy_key, $legacyKeys, true)));
+        $unavailable = $snapshotItems->reject(fn (array $item): bool => $available->contains('id', $item['id']))->pluck('label');
+        foreach (array_diff($legacyKeys, ['bmi'], $selected->pluck('legacy_key')->filter()->all()) as $key) {
+            $unavailable->push(Arr::collapse(array_values(Paket::getDefaultItemCatalog()))[$key] ?? $key);
+        }
+
+        return response()->json([
+            'nama_paket' => mb_substr('Salinan '.$paket->nama_paket, 0, 255),
+            'deskripsi' => $paket->deskripsi,
+            'master_items' => $selected->pluck('id')->values(),
+            'items' => in_array('bmi', $legacyKeys, true) ? ['bmi'] : [],
+            'unavailable' => $unavailable->unique()->values(),
+        ])->header('Cache-Control', 'no-store, private');
     }
 
     public function show(Paket $paket): View

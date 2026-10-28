@@ -27,7 +27,7 @@ class McuTemplateMasterSeeder extends Seeder
         $document = new DOMDocument;
         $previous = libxml_use_internal_errors(true);
         try {
-            $loaded = $document->loadHTMLFile(public_path('Template/hasil-mcu-nayaka.html'), LIBXML_NONET);
+            $loaded = $document->loadHTMLFile(public_path('template/hasil-mcu-nayaka.html'), LIBXML_NONET);
         } finally {
             libxml_clear_errors();
             libxml_use_internal_errors($previous);

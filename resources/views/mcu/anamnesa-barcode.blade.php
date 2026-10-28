@@ -20,7 +20,7 @@
 
 <body class="bg-white text-slate-800">
     <main class="mx-auto grid max-w-lg gap-5 p-6 text-center">
-        <div class="flex items-center justify-between gap-4"><img src="{{ asset('Template/assets/logo.png') }}"
+        <div class="flex items-center justify-between gap-4"><img src="{{ asset('template/assets/logo.png') }}"
                 alt="Nayaka Era Husada" class="h-12 w-36 object-contain">
             @if ($kunjungan->perusahaan->logo_path)
                 <img src="{{ route('perusahaan.logo', $kunjungan->perusahaan) }}" alt="Logo perusahaan"

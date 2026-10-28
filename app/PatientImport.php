@@ -49,7 +49,7 @@ class PatientImport
                 if ($field === 'nik' && $value !== null && $cell['type'] === DataType::TYPE_NUMERIC) {
                     $errors[] = 'NIK harus disimpan sebagai teks agar 16 digit tidak dibulatkan Excel.';
                 }
-                if (in_array($field, ['tanggal_lahir', 'tanggal_mcu'], true) && $cell && $cell['type'] === DataType::TYPE_NUMERIC && is_numeric($value)) {
+                if ($field === 'tanggal_lahir' && $cell && $cell['type'] === DataType::TYPE_NUMERIC && is_numeric($value)) {
                     try {
                         $value = Date::excelToDateTimeObject((float) $value)->format('Y-m-d');
                     } catch (Throwable) {
@@ -67,14 +67,15 @@ class PatientImport
             $validator = Validator::make($data, [
                 'nama_karyawan' => ['required', 'string', 'max:255'], 'nik' => ['nullable', 'digits:16'],
                 'nip' => ['required', 'string', 'max:50'], 'jenis_kelamin' => ['required', Rule::in(['L', 'P'])],
-                'tanggal_lahir' => ['required', 'date_format:Y-m-d', 'before:today'], 'tanggal_mcu' => ['nullable', 'date_format:Y-m-d'],
+                'tanggal_lahir' => ['required', 'date_format:Y-m-d', 'before:today'],
                 'tempat_lahir' => ['nullable', 'string', 'max:255'],
                 'bagian' => ['required', 'string', 'max:255'], 'jabatan' => ['nullable', 'string', 'max:255'],
                 'telepon' => ['nullable', 'string', 'max:255'], 'kunjungan_id' => ['required', 'uuid'], 'paket_id' => ['required', 'uuid'],
             ], ['required' => ':attribute wajib diisi.', 'in' => ':attribute harus 1 (Laki-laki) atau 2 (Perempuan). Kode L/P juga diterima.', 'uuid' => ':attribute harus berupa ID dari master.',
                 'date_format' => ':attribute harus YYYY-MM-DD.', 'before' => ':attribute harus sebelum hari ini.',
                 'digits' => ':attribute harus 16 digit.', 'max' => ':attribute maksimal :max karakter.']);
-            $fingerprintData = $data;
+            /** Preserve receipt hashes from the previous template's field order and empty MCU date. */
+            $fingerprintData = array_replace(array_fill_keys(['nama_karyawan', 'nik', 'nip', 'jenis_kelamin', 'tanggal_lahir', 'bagian', 'jabatan', 'telepon', 'tanggal_mcu', 'kunjungan_id', 'paket_id', 'tempat_lahir'], null), $data);
             if ($fingerprintData['tempat_lahir'] === null) {
                 unset($fingerprintData['tempat_lahir']);
             }
@@ -122,12 +123,20 @@ class PatientImport
             if (isset($seenRows[$row['fingerprint']])) {
                 $row['errors'][] = 'Data baris sama dengan baris '.$seenRows[$row['fingerprint']].'.';
             }
-            if ($visit && $visit->kuota_peserta > 0 && $visit->karyawans_count + ($reserved[$visit->id] ?? 0) >= $visit->kuota_peserta) {
-                $row['errors'][] = 'Kuota kunjungan sudah penuh.';
-            }
             $row['status'] = $row['errors'] === [] ? 'ready' : 'failed';
             if ($row['status'] === 'ready') {
-                $reserved[$visit->id] = ($reserved[$visit->id] ?? 0) + 1;
+                $limit = max(0, (int) $visit->jumlah_peserta_direncanakan);
+                if ($visit->kuota_peserta > 0) {
+                    $limit = min($limit, $visit->kuota_peserta);
+                }
+                if ($visit->karyawans_count + ($reserved[$visit->id] ?? 0) >= $limit) {
+                    $row['status'] = 'excluded';
+                    $row['errors'][] = $limit === 0
+                        ? 'Tidak diikutkan: jumlah peserta direncanakan belum diisi atau nol.'
+                        : 'Tidak diikutkan: sisa kapasitas peserta kunjungan sudah penuh (batas '.$limit.' peserta).';
+                } else {
+                    $reserved[$visit->id] = ($reserved[$visit->id] ?? 0) + 1;
+                }
                 $seenRows[$row['fingerprint']] = $row['number'];
                 if ($data['nik']) {
                     $seenNiks[$data['nik']] = true;
@@ -156,31 +165,32 @@ class PatientImport
             RencanaKunjungan::whereIn('id', array_filter(array_column(array_column($placements, 'data'), 'kunjungan_id')))->orderBy('id')->lockForUpdate()->get();
             Paket::whereIn('id', array_filter(array_column(array_column($placements, 'data'), 'paket_id')))->orderBy('id')->lockForUpdate()->get();
             $rows = $this->preview($batch);
-            foreach ($rows as &$row) {
-                if ($row['status'] !== 'ready') {
-                    continue;
-                }
-                try {
-                    $participant = DB::transaction(function () use ($row): Karyawan {
+            if (in_array('failed', array_column($rows, 'status'), true)) {
+                return $batch;
+            }
+            try {
+                $rows = DB::transaction(function () use ($rows): array {
+                    foreach ($rows as &$row) {
+                        if ($row['status'] !== 'ready') {
+                            continue;
+                        }
                         $data = $row['data'];
-                        $data['tanggal_mcu'] ??= now()->toDateString();
                         $visit = RencanaKunjungan::findOrFail($data['kunjungan_id']);
                         $visit->pakets()->syncWithoutDetaching([$data['paket_id']]);
                         unset($data['kunjungan_id']);
                         $participant = $visit->karyawans()->create([...$data, 'perusahaan_id' => $visit->perusahaan_id]);
                         PatientImportReceipt::create(['fingerprint' => $row['fingerprint'], 'karyawan_id' => $participant->id]);
 
-                        return $participant;
-                    });
-                    $row['status'] = 'succeeded';
-                    $row['nomor_mcu'] = $participant->nomor_mcu;
-                    $row['participant_id'] = $participant->id;
-                    $row['data']['tanggal_mcu'] = $participant->tanggal_mcu->toDateString();
-                } catch (Throwable $exception) {
-                    report($exception);
-                    $row['status'] = 'failed';
-                    $row['errors'][] = 'Penyimpanan baris gagal. Data baris ini tidak disimpan; silakan coba ulang.';
-                }
+                        $row['status'] = 'succeeded';
+                        $row['nomor_mcu'] = $participant->nomor_mcu;
+                        $row['participant_id'] = $participant->id;
+                    }
+
+                    return $rows;
+                });
+            } catch (Throwable $exception) {
+                report($exception);
+                throw ValidationException::withMessages(['import' => 'Penyimpanan batch gagal. Seluruh batch dibatalkan; tidak ada pasien baru disimpan. Silakan crosscheck terlebih dahulu dan coba ulang.']);
             }
             $batch->update(['status' => 'complete', 'results' => $rows]);
 

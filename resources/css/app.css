@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import 'select2/dist/css/select2.css';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
@@ -8,6 +9,29 @@
     --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
+
+[data-loading-skeleton][hidden], [data-examination-body][hidden] { display: none !important; }
+[data-patient-workspace] [hidden], [data-patient-modal] [hidden] { display: none !important; }
+[data-patient-filter] select { min-width: 0; width: 100%; }
+.skeleton-block { background: #e2e8f0; animation: skeleton-pulse 1.5s ease-in-out infinite; }
+@keyframes skeleton-pulse { 50% { opacity: .45; } }
+.mcu-modal { opacity: 0; transition: opacity 200ms var(--ease-out), display 200ms allow-discrete, overlay 200ms allow-discrete; }
+.mcu-modal[open] { opacity: 1; }
+.mcu-modal::backdrop { background: #0f172a66; opacity: 0; transition: opacity 200ms var(--ease-out), display 200ms allow-discrete, overlay 200ms allow-discrete; }
+.mcu-modal[open]::backdrop { opacity: 1; }
+@starting-style { .mcu-modal[open], .mcu-modal[open]::backdrop { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .skeleton-block { animation: none; } .mcu-modal, .mcu-modal::backdrop { transition-duration: 125ms; } }
+.select2-container { max-width: 100%; font-size: 1rem; }
+.select2-container--default .select2-selection--single { min-height: 48px; height: auto; border: 1px solid #cbd5e1; border-radius: .75rem; background: white; }
+.select2-container--default .select2-selection--single .select2-selection__rendered { padding: 10px 36px 10px 12px; line-height: 26px; white-space: normal; overflow-wrap: anywhere; color: #334155; }
+.select2-container--default .select2-selection--single .select2-selection__arrow { height: 46px; right: 8px; }
+.select2-container--default.select2-container--focus .select2-selection--single, .select2-container--open .select2-selection--single { border-color: #00008b; box-shadow: 0 0 0 3px #dbeafe; }
+.select2-dropdown { border-color: #cbd5e1; border-radius: .75rem; overflow: hidden; box-shadow: 0 12px 28px #0f172a18; }
+.select2-search--dropdown { padding: 10px; }
+.select2-container--default .select2-search--dropdown .select2-search__field { min-height: 44px; border: 1px solid #cbd5e1; border-radius: .5rem; padding: 8px; font-size: 16px; }
+.select2-results__option { padding: 12px; overflow-wrap: anywhere; }
+.select2-container--default .select2-results__option--highlighted[aria-selected] { background: #00008b; }
+.select2-container--default.select2-container--disabled .select2-selection--single { background: #f1f5f9; }
 
 [data-dashboard-workspace], [data-hrd-dashboard] { overflow-anchor: none; }
 .hrd-widget-grid { display: grid; align-items: start; gap: 1.25rem; grid-template-columns: minmax(0, 1fr); }

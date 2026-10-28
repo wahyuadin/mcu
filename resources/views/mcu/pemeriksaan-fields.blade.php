@@ -19,7 +19,7 @@
                     <div class="min-w-0"><dt class="text-slate-500">{{ $label }}</dt><dd class="mt-2 break-words font-semibold">{{ $value ?: 'Belum diisi' }}</dd></div>
                 @endforeach
             </dl>
-            @if(auth()->user()->can('examine-mcu'))<figure class="flex shrink-0 flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white p-4 lg:w-44"><img src="{{ $checkpoint['qrDataUri'] }}" alt="QR menuju pemeriksaan pasien" class="h-36 w-36"><figcaption class="text-center text-xs font-semibold text-slate-500">Scan untuk pemeriksaan</figcaption></figure>@endif
+            @if(auth()->user()->can('examine-mcu'))<figure class="flex shrink-0 flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white p-4 lg:w-44"><a href="{{ $checkpoint['scanUrl'] }}" data-examination-scan-url title="{{ $checkpoint['scanUrl'] }}" aria-label="Buka pemeriksaan pasien"><img src="{{ $checkpoint['qrDataUri'] }}" alt="QR menuju pemeriksaan pasien" class="h-36 w-36"></a><figcaption class="text-center text-xs font-semibold text-slate-500">Scan untuk pemeriksaan</figcaption></figure>@endif
         </div>
         @if(!$readonly)<div class="flex flex-wrap gap-3 border-t border-slate-200 pt-5">
             <button type="button" data-photo-modal-open aria-haspopup="dialog" aria-controls="patient-photo-modal" class="rounded-xl bg-blue-900 px-5 py-3 text-sm font-semibold text-white">Edit identitas pasien</button>

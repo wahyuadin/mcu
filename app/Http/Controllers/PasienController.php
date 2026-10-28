@@ -7,6 +7,7 @@ use App\Models\Paket;
 use App\Models\Pasien;
 use App\Models\Perusahaan;
 use App\Models\RencanaKunjungan;
+use App\PatientProfile;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Http\RedirectResponse;
@@ -19,7 +20,7 @@ use Illuminate\View\View;
 
 class PasienController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request, PatientProfile $profiles): View
     {
         $search = trim((string) $request->query('q', ''));
         $episodeFilter = function (Builder $query) use ($request): void {
@@ -28,19 +29,33 @@ class PasienController extends Controller
                 ->when(in_array($request->query('status'), ['belum', 'proses', 'siap_finalisasi', 'selesai', 'batal', 'tidak_hadir'], true), fn ($query) => $query->where('status_pemeriksaan', $request->query('status')));
         };
 
+        $sort = in_array($request->query('sort'), ['nama', 'tanggal_lahir', 'created_at'], true) ? $request->query('sort') : 'created_at';
+        $direction = in_array($request->query('direction'), ['asc', 'desc'], true) ? $request->query('direction') : 'desc';
+        $pasiens = Pasien::with(['episodes' => function (HasMany $query) use ($episodeFilter): void {
+            $episodeFilter($query->getQuery());
+            $query->with('perusahaan', 'paket', 'rencanaKunjungan', 'anamnesa')->orderByRaw('COALESCE(tanggal_mcu, created_at) DESC')->orderByDesc('id')->limit(1);
+        }])->withCount(['episodes', 'episodes as visits_count' => fn ($query) => $query->withTrashed()])
+            ->when($request->filled('perusahaan') || $request->filled('kunjungan') || $request->filled('status'), fn ($query) => $query->whereHas('episodes', $episodeFilter))
+            ->when($search !== '', fn ($query) => $query->where(function ($query) use ($search): void {
+                $query->where('nama', 'like', '%'.$search.'%')->orWhere('nik', 'like', '%'.$search.'%')
+                    ->orWhereHas('episodes', fn ($query) => $query->where('nip', 'like', '%'.$search.'%')->orWhere('nomor_mcu', 'like', '%'.$search.'%'));
+            }))
+            ->orderBy($sort, $direction)->orderBy('id', $direction)->paginate(20)->withQueryString();
+        $photoEpisodes = Karyawan::whereIn('pasien_id', $pasiens->pluck('id'))->whereNotNull('foto')
+            ->orderByRaw('COALESCE(tanggal_mcu, created_at) DESC')->orderByDesc('id')
+            ->get(['id', 'pasien_id', 'foto'])->groupBy('pasien_id');
+        $patientPhotos = [];
+        foreach ($pasiens as $identity) {
+            $path = $profiles->photoPath($identity, $photoEpisodes->get($identity->id, collect()));
+            $patientPhotos[$identity->id] = $path ? route('pasien.identity.photo', [$identity, 'v' => hash('sha256', $path)]) : null;
+        }
+
         return view('mcu.pasiens.index', [
-            'pasiens' => Pasien::with(['episodes' => function (HasMany $query) use ($episodeFilter): void {
-                $episodeFilter($query->getQuery());
-                $query->with('perusahaan', 'paket')->latest()->orderByDesc('id')->limit(1);
-            }])->withCount('episodes')->whereHas('episodes', $episodeFilter)
-                ->when($search !== '', fn ($query) => $query->where(function ($query) use ($search): void {
-                    $query->where('nama', 'like', '%'.$search.'%')->orWhere('nik', 'like', '%'.$search.'%')
-                        ->orWhereHas('episodes', fn ($query) => $query->where('nip', 'like', '%'.$search.'%')->orWhere('nomor_mcu', 'like', '%'.$search.'%'));
-                }))
-                ->latest()->paginate(20)->withQueryString(),
+            'pasiens' => $pasiens,
+            'sort' => $sort, 'direction' => $direction, 'patientPhotos' => $patientPhotos, 'profiles' => $profiles,
             'perusahaans' => Perusahaan::orderBy('nama_perusahaan')->get(),
             'stats' => [
-                'total' => Pasien::whereHas('episodes')->count(),
+                'total' => Pasien::count(),
                 'process' => Karyawan::whereIn('status_pemeriksaan', ['proses', 'siap_finalisasi'])->count(),
                 'completed' => Karyawan::where('status_pemeriksaan', 'selesai')->count(),
             ],
@@ -79,6 +94,9 @@ class PasienController extends Controller
             if ($kunjungan->is_closing || ($kunjungan->kuota_peserta > 0 && $kunjungan->karyawans()->count() >= $kunjungan->kuota_peserta)) {
                 throw ValidationException::withMessages(['rencana_kunjungan_id' => 'Kunjungan ditutup atau kuota peserta sudah penuh.']);
             }
+            if (isset($data['pasien_id']) && ! Pasien::whereKey($data['pasien_id'])->lockForUpdate()->first()) {
+                throw ValidationException::withMessages(['pasien_id' => 'Pasien tidak tersedia atau sudah dihapus. Muat ulang daftar pasien.']);
+            }
             if (isset($data['pasien_id']) && $kunjungan->karyawans()->where('pasien_id', $data['pasien_id'])->exists()) {
                 throw ValidationException::withMessages(['pasien_id' => 'Pasien sudah terdaftar dalam kegiatan ini. Buka episode yang ada.']);
             }
@@ -91,18 +109,11 @@ class PasienController extends Controller
         return redirect()->route('pasien.show', $pasien)->with('success', 'Pasien didaftarkan.');
     }
 
-    public function show(Karyawan $pasien): View
+    public function show(Karyawan $pasien, PatientProfile $profiles): View
     {
         $pasien->load(['pasien', 'perusahaan', 'rencanaKunjungan', 'paket', 'anamnesa']);
-        $episodes = Karyawan::with('perusahaan', 'paket', 'rencanaKunjungan', 'anamnesa')
-            ->where('pasien_id', $pasien->pasien_id)->orderByRaw('COALESCE(tanggal_mcu, created_at) DESC')->orderByDesc('id')->get();
-        $currentEmployment = $episodes->first() ?? $pasien;
 
-        return view('mcu.pasiens.show', [
-            'pasien' => $pasien, 'identity' => $pasien->pasien, 'episodes' => $episodes,
-            'currentEmployment' => $currentEmployment,
-            'patientAge' => ($pasien->pasien?->tanggal_lahir ?? $pasien->tanggal_lahir)?->age,
-        ]);
+        return view('mcu.pasiens.show', $profiles->data($pasien->pasien, $pasien));
     }
 
     public function edit(Karyawan $pasien): View
@@ -159,13 +170,9 @@ class PasienController extends Controller
 
     public function destroy(Karyawan $pasien): RedirectResponse
     {
-        abort_if($pasien->rencanaKunjungan->is_closing || $pasien->is_closing, 403);
-        if ($pasien->anamnesa()->exists()) {
-            return back()->withErrors(['pasien' => 'Pasien dengan hasil pemeriksaan tidak dapat dihapus.']);
-        }
-        $pasien->delete();
+        abort_if($pasien->rencanaKunjungan?->is_closing || $pasien->is_closing, 403);
 
-        return redirect()->route('pasien.index')->with('success', 'Pasien dihapus.');
+        return back()->withErrors(['pasien' => 'Pasien sudah memiliki kunjungan.']);
     }
 
     private function validated(Request $request): array

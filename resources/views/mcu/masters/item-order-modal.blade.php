@@ -6,6 +6,9 @@
         @else
             <label class="grid gap-2 text-sm font-semibold">Kategori<select data-item-order-category data-order-noun="{{ ($orderingSubcategories ?? false) ? 'subkategori' : 'item' }}" class="min-h-12 min-w-0 rounded-xl border border-slate-300 bg-white px-3"><option value="">Pilih kategori</option>@foreach($categories as $category)<option value="{{ $category->id }}" data-url="{{ route(($orderingSubcategories ?? false) ? 'mcu-subcategory-order.show' : 'mcu-item-order.show', $category) }}">{{ $category->name }}</option>@endforeach</select></label>
         @endif
+        @if(!($orderingCategories ?? false) && !($orderingSubcategories ?? false))
+            <label class="grid gap-2 text-sm font-semibold">Subkategori<select data-item-order-subcategory disabled class="min-h-12 min-w-0 rounded-xl border border-slate-300 bg-white px-3"><option value="">Semua subkategori</option></select></label>
+        @endif
         <p data-item-order-status role="status" aria-live="polite" class="text-sm text-slate-600">Pilih kategori untuk menampilkan kartu item.</p>
         <ol data-item-order-board aria-label="{{ ($orderingCategories ?? false) ? 'Urutan kategori dari atas ke bawah' : (($orderingSubcategories ?? false) ? 'Urutan subkategori dari atas ke bawah' : 'Urutan item dari atas ke bawah') }}" class="grid gap-3"></ol>
         <p class="text-xs text-slate-500">Urutan mencakup {{ ($orderingCategories ?? false) ? 'kategori' : (($orderingSubcategories ?? false) ? 'subkategori' : 'item') }} aktif dan nonaktif. Perubahan hanya berlaku untuk konfigurasi paket berikutnya; snapshot paket dan hasil lama tidak berubah.</p>

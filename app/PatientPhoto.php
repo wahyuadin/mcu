@@ -3,6 +3,7 @@
 namespace App;
 
 use App\Models\Karyawan;
+use App\Models\Pasien;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -10,7 +11,7 @@ use Illuminate\Validation\ValidationException;
 
 class PatientPhoto
 {
-    public function store(UploadedFile $file, Karyawan $participant): string
+    public function store(UploadedFile $file, Karyawan|Pasien $participant): string
     {
         if (! function_exists('imagewebp')) {
             throw ValidationException::withMessages(['foto_pasien' => 'Server memerlukan GD dengan dukungan WebP. Hubungi administrator.']);
@@ -50,7 +51,7 @@ class PatientPhoto
             }
             rewind($stream);
             $bytes = stream_get_contents($stream);
-            $path = 'mcu/'.$participant->id.'/foto-'.Str::uuid().'.webp';
+            $path = ($participant instanceof Pasien ? 'patients/' : 'mcu/').$participant->id.'/foto-'.Str::uuid().'.webp';
             if (! $bytes || ! Storage::disk('local')->put($path, $bytes)) {
                 throw ValidationException::withMessages(['foto_pasien' => 'Foto gagal disimpan. Silakan coba lagi.']);
             }

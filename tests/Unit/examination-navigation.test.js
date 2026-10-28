@@ -45,14 +45,16 @@ function fixture() {
   let root;
   const makeRoot = (name) => ({
     name,
+    skeleton: { hidden: true },
+    body: { hidden: false, inert: false },
     before() {},
     setAttribute() {},
     removeAttribute() {},
     contains(node) {
       return node?.owner === this;
     },
-    querySelector() {
-      return null;
+    querySelector(selector) {
+      return selector === '[data-loading-skeleton]' ? this.skeleton : selector === '[data-examination-body]' ? this.body : null;
     },
     replaceWith(next) {
       root = next;
@@ -179,12 +181,19 @@ test('tab navigation replaces only the examination region and updates URL and li
   const h = fixture();
   assert.equal(h.click('identitas'), true);
   assert.equal(h.requests[0].options.cache, 'no-store');
+  assert.equal(h.root.skeleton.hidden, false);
+  assert.equal(h.root.body.hidden, true);
+  assert.equal(h.root.body.inert, true);
+  assert.equal(h.notice.textContent, '');
   await h.respond(0, 'Identitas');
   assert.equal(h.root.name, 'Identitas');
   assert.equal(h.document.title, 'Identitas');
   assert.match(h.window.location.href, /tab=identitas/);
   assert.deepEqual(h.dispatched, ['mcu:exam-unmount', 'mcu:exam-mounted']);
   assert.equal(h.assigned.length, 0);
+  assert.equal(h.root.skeleton.hidden, true);
+  assert.equal(h.root.body.hidden, false);
+  assert.equal(h.notice.textContent, '');
 });
 
 test('older responses cannot replace the newest tab', async () => {
@@ -225,6 +234,8 @@ test('network failure keeps draft inputs and remains retryable', async () => {
   await tick();
   assert.equal(h.root.name, 'summary');
   assert.match(h.notice.textContent, /gagal dimuat/);
+  assert.equal(h.root.skeleton.hidden, true);
+  assert.equal(h.root.body.hidden, false);
   h.click('fisik');
   assert.equal(h.confirmations, 2);
   assert.equal(h.requests.length, 2);

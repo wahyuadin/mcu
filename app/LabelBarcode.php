@@ -2,6 +2,7 @@
 
 namespace App;
 
+use Endroid\QrCode\Encoding\Encoding;
 use Endroid\QrCode\QrCode;
 use Endroid\QrCode\Writer\SvgWriter;
 use InvalidArgumentException;
@@ -55,6 +56,6 @@ class LabelBarcode
         $modules = $x + 10;
         $svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '.$modules.' 50" preserveAspectRatio="none" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="white"/><g fill="black">'.$bars.'</g></svg>';
 
-        return ['qr' => (new SvgWriter)->write(new QrCode(data: $url, size: 320, margin: 24))->getDataUri(), 'code128' => 'data:image/svg+xml;base64,'.base64_encode($svg), 'modules' => $modules];
+        return ['qr' => (new SvgWriter)->write(new QrCode(data: $url, encoding: new Encoding('ISO-8859-1'), size: 320, margin: 24))->getDataUri(), 'code128' => 'data:image/svg+xml;base64,'.base64_encode($svg), 'modules' => $modules];
     }
 }

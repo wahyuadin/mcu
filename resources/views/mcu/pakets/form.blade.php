@@ -25,6 +25,13 @@
                 <p class="mt-1 text-sm leading-5 text-slate-400">Konfigurasi sekali, gunakan di beberapa rencana kunjungan dan perusahaan.</p>
             </div>
             @if(!$paket->exists && old('rencana_kunjungan_id', request('rencana_kunjungan_id')))<input type="hidden" name="rencana_kunjungan_id" value="{{ old('rencana_kunjungan_id', request('rencana_kunjungan_id')) }}">@endif
+            @if(!$paket->exists)
+                <div class="grid gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
+                    <label class="grid min-w-0 gap-2 text-sm font-semibold">Salin dari paket<select data-package-template-select class="w-full"><option value="">Pilih paket sebagai template</option>@foreach($templatePackages as $templatePackage)<option value="{{ $templatePackage->id }}" data-url="{{ route('paket.template', $templatePackage) }}">{{ $templatePackage->nama_paket }}</option>@endforeach</select></label>
+                    <button type="button" data-package-template-apply class="min-h-11 rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-900">Gunakan sebagai template</button>
+                    <p data-package-template-status role="status" class="text-xs leading-5 text-blue-900">Hanya konfigurasi pemeriksaan yang disalin, bukan peserta atau kunjungan.</p>
+                </div>
+            @endif
             <label class="grid gap-2 text-sm font-semibold text-slate-700">Nama paket<input name="nama_paket" required value="{{ old('nama_paket', $paket->nama_paket) }}" placeholder="Contoh: Executive Full" class="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-[#00008B] focus:ring-4 focus:ring-blue-100"></label>
             <label class="grid gap-2 text-sm font-semibold text-slate-700">Deskripsi<textarea name="deskripsi" rows="4" placeholder="Keterangan singkat paket..." class="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#00008B] focus:ring-4 focus:ring-blue-100">{{ old('deskripsi', $paket->deskripsi) }}</textarea></label>
             <div class="rounded-xl bg-blue-50 p-4 text-sm leading-6 text-blue-800"><strong class="block">Tips konfigurasi</strong>Centang cakupan paket. Pilih paket ini di detail Rencana Kunjungan tanpa mapping ulang.</div>

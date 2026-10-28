@@ -17,9 +17,11 @@ use ZipArchive;
 
 class PatientSpreadsheet
 {
-    public const MAX_ROWS = 500;
+    public const MAX_ROWS = 2000;
 
-    public const HEADERS = ['nama_karyawan', 'nik', 'nip', 'jenis_kelamin', 'tanggal_lahir', 'bagian', 'jabatan', 'telepon', 'tanggal_mcu', 'kunjungan_id', 'paket_id', 'tempat_lahir'];
+    public const HEADERS = ['kunjungan_id', 'paket_id', 'nama_karyawan', 'nik', 'nip', 'jenis_kelamin', 'tempat_lahir', 'tanggal_lahir', 'bagian', 'jabatan', 'telepon'];
+
+    public const REQUIRED_HEADERS = ['kunjungan_id', 'paket_id', 'nama_karyawan', 'nip', 'jenis_kelamin', 'tanggal_lahir', 'bagian'];
 
     public function template(): Spreadsheet
     {
@@ -27,16 +29,20 @@ class PatientSpreadsheet
         $sheet = $book->getActiveSheet()->setTitle('Pasien');
         $visits = RencanaKunjungan::with('perusahaan')->where('is_closing', false)->orderBy('nomor_kunjungan')->get();
         $packages = Paket::orderBy('nama_paket')->get();
+        $exampleVisit = $visits->firstWhere('id', '01a1805a-95a1-702e-b66d-7654f9955633') ?? $visits->first();
+        $examplePackage = $packages->firstWhere('id', '01a1805e-92a3-70ce-bfcf-8ac92d84a56c') ?? $packages->first();
         $this->writeSheet($sheet, self::HEADERS, [[
-            'Wahyu Adi Nugroho', (string) random_int(1000000000000000, 9999999999999999), 'NYK-19423', '1', '2005-08-24',
-            'Operasional', '', '08'.str_pad((string) random_int(0, 9999999999), 10, '0', STR_PAD_LEFT), '',
-            $visits->isNotEmpty() ? $visits->random()->id : '', $packages->isNotEmpty() ? $packages->random()->id : '', 'Bandung',
+            $exampleVisit?->id ?? '', $examplePackage?->id ?? '', 'Wahyu Adi Nugroho', '8841583952153971', 'NYK-19423', '1',
+            'Bandung', '2005-08-24', 'Operasional', 'Staff IT', '086001143473',
         ]]);
-        foreach (['B', 'C', 'H', 'J', 'K'] as $column) {
+        foreach (['A', 'B', 'D', 'E', 'K'] as $column) {
             $sheet->getStyle($column.'2:'.$column.(self::MAX_ROWS + 1))->getNumberFormat()->setFormatCode('@');
         }
-        foreach (['E', 'I'] as $column) {
-            $sheet->getStyle($column.'2:'.$column.(self::MAX_ROWS + 1))->getNumberFormat()->setFormatCode('yyyy-mm-dd');
+        $sheet->getStyle('H2:H'.(self::MAX_ROWS + 1))->getNumberFormat()->setFormatCode('yyyy-mm-dd');
+        foreach (self::HEADERS as $index => $field) {
+            $coordinate = Coordinate::stringFromColumnIndex($index + 1).'1';
+            $required = in_array($field, self::REQUIRED_HEADERS, true);
+            $sheet->getComment($coordinate)->getText()->createTextRun($required ? 'Wajib diisi.' : ($field === 'nik' ? 'Opsional. Kosong diperbolehkan; jika diisi harus teks 16 digit.' : 'Opsional, boleh dikosongkan.'));
         }
         $this->writeSheet($book->createSheet()->setTitle('Master Kunjungan MCU'), ['kunjungan_id', 'nomor_kunjungan', 'perusahaan', 'periode', 'tanggal_mulai', 'tanggal_selesai'],
             $visits->map(fn (RencanaKunjungan $visit): array => [$visit->id, $visit->nomor_kunjungan, $visit->perusahaan->nama_perusahaan, $visit->periode_kunjungan, $visit->tgl_mulai?->toDateString(), $visit->tgl_selesai?->toDateString()])->all());
